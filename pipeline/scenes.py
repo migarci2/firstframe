@@ -27,11 +27,16 @@ Reglas duras aplicadas aqui:
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from genblaze import (
     AgentContext,
@@ -44,9 +49,18 @@ from genblaze import (
     StepCache,
     StepType,
 )
+from genblaze_core.models.step import Step
+from genblaze_core.runnable.config import RunnableConfig
 
 from pipeline import providers as P
+from pipeline.free_provider import PollinationsProvider, _image_size
 from pipeline.judge import DEFAULT_THRESHOLD, FrameEvaluator, frame_evaluator
+from pipeline.kenburns import (
+    KEN_BURNS_FALLBACK,
+    KEN_BURNS_MODEL,
+    KenBurnsProvider,
+    move_for,
+)
 
 logger = logging.getLogger("firstframe.scenes")
 
@@ -58,6 +72,20 @@ VIDEO_MODEL = "pixverse-v5.6"
 VIDEO_FALLBACKS = ["seedance-2-0"]
 CHAOS_KEY = "gmicloud"          # el nombre que mata `POST /api/chaos`
 DRAFT_WATERMARK = "DRAFT - FirstFrame"
+
+# --- Modo `free`: generacion REAL sin tarjeta (PLAN §0) ----------------------
+# Pollinations para el keyframe (imagen de verdad, ~45 s en el tier anonimo) y
+# Ken Burns para convertirlo en plano. Ningun modelo de video gratis existe hoy;
+# lo honesto es que el manifest diga "kenburns-2.5d" y no "pixverse".
+FREE_IMAGE_MODEL = "flux"
+FREE_IMAGE_FALLBACKS = ["turbo"]
+FREE_VIDEO_MODEL = KEN_BURNS_MODEL
+FREE_VIDEO_FALLBACKS = [KEN_BURNS_FALLBACK]
+
+# Los keyframes viven bajo tmp porque `ObjectStorageSink` SOLO sube file:// bajo
+# tmp. El corpus (copia persistente, ver `KeyframeCorpus`) puede vivir donde sea.
+KEYFRAME_TMP = Path(tempfile.gettempdir()) / "firstframe-keyframes"
+DEFAULT_CORPUS = "data/keyframes"
 
 # --- Plantillas de prompt ----------------------------------------------------
 # PromptTemplate(template=...) SIEMPRE por kwarg, nunca posicional. Y hay que
@@ -81,6 +109,25 @@ REFINE_TEMPLATE = PromptTemplate(template=(
     "\n\nThe previous attempt was rejected by the quality judge: {feedback}. "
     "Fix exactly that."
 ))
+
+# Plantilla del modo `free`. Distinta a proposito y MUCHO mas corta:
+#   - El ancla de estilo ya viene dentro de `shot` (la mete `runner.plan_scenes`),
+#     asi que las 3 escenas comparten paleta, luz y tratamiento sin repetirlo aqui.
+#   - Nada de "scene 3 of 3" ni del brief entero: los numeros y los nombres de
+#     marca hacen que el modelo intente ESCRIBIRLOS en la imagen.
+#   - "no people": el tier anonimo hace caras de plastico. Planos generales,
+#     producto y textura son donde este modelo es bueno (medido, PLAN §0).
+FREE_KEYFRAME_TEMPLATE = PromptTemplate(template=(
+    "{shot}. Cinematic advertising still, 16:9, no people, no text, no logos, "
+    "professional color grading, high detail.{refine}"
+))
+# `negative_prompt` viaja como campo de Step (el pipeline lo saca de params) y
+# entra en la clave de cache, asi que cambiarlo invalida el corpus a proposito.
+FREE_NEGATIVE_PROMPT = (
+    "human face, portrait, person, people, hands, fingers, text, letters, words, "
+    "watermark, signature, logo, ugly, deformed, disfigured, low quality, blurry, "
+    "jpeg artifacts, oversaturated, collage, frame, border"
+)
 
 
 @dataclass(frozen=True)
@@ -116,14 +163,196 @@ class ProviderSet:
     notes: list[str] = field(default_factory=list)
 
 
+GEN_MODES = ("mock", "free", "real")
+
+
 def demo_mode() -> str:
-    """`DEMO_MODE=mock|real`. Default mock: no hay proveedor de media disponible."""
+    """`DEMO_MODE=mock|free|real`. Se mantiene por compatibilidad con el server."""
     return os.environ.get("DEMO_MODE", "mock").strip().lower()
+
+
+def gen_mode() -> str:
+    """Modo de generacion: `GEN_MODE=mock|free|real` (default mock).
+
+    Tres modos, no dos:
+      mock  ffmpeg testsrc2. Sin red, instantaneo, es lo que corren los demo().
+      free  generacion de imagen REAL (Pollinations) + Ken Burns. Sin tarjeta,
+            sin claves, ~45 s por escena.
+      real  conectores de pago/con clave (NIM, OpenAI, GMICloud).
+
+    `DEMO_MODE` se sigue leyendo como respaldo porque es lo que ya exporta el
+    Dockerfile y `server/jobs.py` (que ademas fuerza mock=True cuando vale
+    "mock": por eso desplegar en free es cambiar esa variable y nada mas).
+    """
+    raw = (os.environ.get("GEN_MODE") or os.environ.get("DEMO_MODE") or "").strip().lower()
+    if raw not in GEN_MODES:
+        if raw:
+            logger.warning("GEN_MODE=%r no es %s; uso mock", raw, "|".join(GEN_MODES))
+        return "mock"
+    return raw
+
+
+# --- Corpus de keyframes ------------------------------------------------------
+
+class KeyframeCorpus:
+    """Cache persistente de imagenes generadas, indexada por prompt+seed+modelo.
+
+    A 45 s por imagen, regenerar en cada prueba es inviable: sin esto no se
+    puede ni ensayar la demo. La `StepCache` del SDK ya evita repetir un step,
+    pero su directorio va namespaceado POR JOB (`runner.run_job`) — dos jobs
+    distintos con el mismo brief volverian a pagar los 45 s. Este corpus es
+    transversal a los jobs y sobrevive a un borrado de /tmp o a un
+    redespliegue: por eso `--pregenerate` puede dejar la demo cargada.
+
+    Layout: `<dir>/index.json` (clave -> fichero) + los ficheros, con el mismo
+    nombre content-addressed que usa `PollinationsProvider`.
+    """
+
+    def __init__(self, directory: str | Path | None = None) -> None:
+        self.dir = Path(directory or os.environ.get("KEYFRAME_CORPUS") or DEFAULT_CORPUS)
+        self.index_path = self.dir / "index.json"
+
+    @staticmethod
+    def key(prompt: str, *, model: str | None, seed: Any, width: int, height: int,
+            negative_prompt: str | None) -> str:
+        blob = json.dumps({"prompt": prompt, "model": model, "seed": seed,
+                           "width": width, "height": height,
+                           "negative_prompt": negative_prompt},
+                          sort_keys=True, ensure_ascii=False)
+        return hashlib.sha256(blob.encode()).hexdigest()[:32]
+
+    def _index(self) -> dict[str, str]:
+        try:
+            return json.loads(self.index_path.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def get(self, key: str) -> Path | None:
+        name = self._index().get(key)
+        if not name:
+            return None
+        path = self.dir / name
+        return path if path.is_file() else None
+
+    def put(self, key: str, path: str | Path) -> Path:
+        path = Path(path)
+        self.dir.mkdir(parents=True, exist_ok=True)
+        dest = self.dir / path.name
+        if not dest.is_file():
+            shutil.copy2(path, dest)
+        index = self._index()
+        index[key] = dest.name
+        tmp = self.index_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(index, indent=1, sort_keys=True))
+        tmp.replace(self.index_path)   # atomico: nunca un index a medias
+        return dest
+
+    def __len__(self) -> int:
+        return len(self._index())
+
+
+class CachedPollinations(PollinationsProvider):
+    """`PollinationsProvider` + corpus persistente + seed deterministica.
+
+    Dos arreglos sobre el provider base, ninguno de los cuales toca su fichero:
+
+    1. **La seed.** `Pipeline` SACA `seed` de `params` y la pone en `Step.seed`
+       (pipeline.py:1207), asi que `PollinationsProvider`, que la lee de
+       `step.params`, nunca la veria y cada re-render daria una imagen distinta.
+       Aqui se re-inyecta en params SOLO durante la llamada y se restaura al
+       salir: si se dejara mutada, la clave que usa `StepCache.put` dejaria de
+       coincidir con la de `get` y el cache del SDK no acertaria jamas.
+
+    2. **El corpus.** Antes de pagar 45 s se mira si esa imagen ya existe. Es
+       cache de PROVIDER, no de step: acierta aunque cambie el job, el numero
+       de escena o el resto del pipeline.
+    """
+
+    def __init__(self, *, corpus: KeyframeCorpus | str | Path | None = None,
+                 **kwargs: Any) -> None:
+        kwargs.setdefault("output_dir", KEYFRAME_TMP)
+        super().__init__(**kwargs)
+        self.corpus = corpus if isinstance(corpus, KeyframeCorpus) else KeyframeCorpus(corpus)
+
+    def _cache_key(self, step: Step, seed: Any) -> str:
+        params = step.params or {}
+        return KeyframeCorpus.key(
+            str(step.prompt or ""), model=step.model, seed=seed,
+            width=int(params.get("width", self.width)),
+            height=int(params.get("height", self.height)),
+            negative_prompt=step.negative_prompt,
+        )
+
+    def generate(self, step: Step, config: RunnableConfig | None = None) -> Step:
+        original = step.params
+        seed = (original or {}).get("seed", step.seed)
+        key = self._cache_key(step, seed)
+
+        hit = self.corpus.get(key)
+        if hit is not None:
+            # El asset TIENE que apuntar bajo tmp: el sink rechaza cualquier
+            # otra ruta. El corpus puede vivir en el repo, la copia no.
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            local = self.output_dir / hit.name
+            if not local.is_file():
+                shutil.copy2(hit, local)
+            width, height = _image_size(local)
+            asset = P.local_asset(local, width=width, height=height)
+            asset.metadata = {"provider": self.name, "model": step.model,
+                              "seed": seed, "cached": True,
+                              "corpus": str(self.corpus.dir)}
+            step.assets.append(asset)
+            logger.info("keyframe desde el corpus (%s), 45 s ahorrados", local.name)
+            return step
+
+        if seed is not None and (original or {}).get("seed") is None:
+            step.params = {**(original or {}), "seed": int(seed)}
+        try:
+            step = super().generate(step, config)
+        finally:
+            step.params = original   # ver docstring: no romper la clave de cache
+
+        if step.assets:
+            path = Path(step.assets[-1].url.removeprefix("file://"))
+            if path.is_file():
+                self.corpus.put(key, path)
+        return step
+
+
+def prompt_seed(text: str) -> int:
+    """Seed deterministica a partir del prompt final.
+
+    Del PROMPT y no de (job, escena): asi el mismo brief reutiliza la imagen
+    aunque cambie el job, y un prompt refinado por el juez genera una imagen
+    NUEVA (que es justo lo que pide el refinado).
+    """
+    return int(hashlib.sha256(text.encode()).hexdigest()[:8], 16) % (2 ** 31)
+
+
+def free_providers(scene: Scene, workdir: Path, ps: ProviderSet) -> ProviderSet:
+    """Enchufa generacion real gratuita: Pollinations + Ken Burns."""
+    ps.image = CachedPollinations()
+    ps.image_model = FREE_IMAGE_MODEL
+    ps.image_fallbacks = list(FREE_IMAGE_FALLBACKS)
+    ps.video = KenBurnsProvider(
+        output_dir=workdir, seconds=scene.seconds,
+        # scene.n-1: la escena 1 abre con push-in, la 2 panea, la 3 se aleja.
+        scene=max(0, scene.n - 1),
+        # Si el sink ya reescribio la url del keyframe a B2, se recupera por sha.
+        image_dirs=[KEYFRAME_TMP, workdir],
+    )
+    ps.video_model = FREE_VIDEO_MODEL
+    ps.video_fallbacks = list(FREE_VIDEO_FALLBACKS)
+    ps.mode = "free"
+    ps.notes.append("keyframe REAL con Pollinations (gratis, ~45 s en el tier anonimo)")
+    ps.notes.append(f"clip por Ken Burns ffmpeg ({FREE_VIDEO_MODEL}), no hay video gratis")
+    ps.notes.append("voiceover en mock: no hay TTS gratis sin tarjeta")
+    return ps
 
 
 def resolve_providers(scene: Scene, workdir: str | Path, *, mock: bool | None = None
                       ) -> ProviderSet:
-    """Elige providers reales o mocks. Los reales se enchufan solo por env.
+    """Elige providers mock, free o reales. Ver `gen_mode()`.
 
     Cada provider real se activa unicamente si su libreria importa Y su clave
     esta en el entorno. Si falta, ese hueco cae al mock con una nota — asi un
@@ -131,7 +360,11 @@ def resolve_providers(scene: Scene, workdir: str | Path, *, mock: bool | None = 
     """
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
-    want_real = (mock is False) or (mock is None and demo_mode() == "real")
+    mode = gen_mode()
+    if mock is True:
+        mode = "mock"                                  # --mock manda sobre el env
+    elif mock is False and mode == "mock":
+        mode = "real"                                  # --real sin GEN_MODE
 
     label = f"S{scene.n} {scene.title}"
     ps = ProviderSet(
@@ -142,8 +375,10 @@ def resolve_providers(scene: Scene, workdir: str | Path, *, mock: bool | None = 
         compositor=FFmpegCompositor(output_dir=workdir),
         mode="mock",
     )
-    if not want_real:
+    if mode == "mock":
         return ps
+    if mode == "free":
+        return free_providers(scene, workdir, ps)
 
     real_bits = 0
     if os.environ.get("NVIDIA_API_KEY"):
@@ -185,11 +420,18 @@ def resolve_providers(scene: Scene, workdir: str | Path, *, mock: bool | None = 
 
 
 def keyframe_prompt(scene: Scene, brief: str, feedback: str | None,
-                    iteration: int) -> str:
-    """Prompt del keyframe, con la razon del juez inyectada al refinar."""
+                    iteration: int, *, mode: str = "mock") -> str:
+    """Prompt del keyframe, con la razon del juez inyectada al refinar.
+
+    En modo `free` se usa una plantilla distinta (ver `FREE_KEYFRAME_TEMPLATE`):
+    corta, sin numeros de escena y sin el brief crudo, porque el modelo del
+    tier anonimo intenta dibujar cualquier texto que le llegue.
+    """
     refine = ""
     if feedback and iteration > 0:
         refine = REFINE_TEMPLATE.render(feedback=feedback)
+    if mode == "free":
+        return FREE_KEYFRAME_TEMPLATE.render(shot=scene.keyframe_prompt, refine=refine)
     return KEYFRAME_TEMPLATE.render(n=scene.n, title=scene.title,
                                     shot=scene.keyframe_prompt,
                                     brief=brief.strip(), refine=refine)
@@ -235,12 +477,22 @@ def build_scene_pipeline(
         pipe.cache(StepCache(cache_dir))
 
     # --- step 0: keyframe -----------------------------------------------------
+    kf_prompt = keyframe_prompt(scene, brief, feedback, iteration, mode=ps.mode)
+    kf_params: dict[str, Any] | None = None
+    if ps.mode == "free":
+        # `seed` y `negative_prompt` los saca el pipeline de params y los sube a
+        # campos de Step; los dos entran en la clave de `StepCache` y en la del
+        # corpus, asi que el mismo prompt reutiliza imagen y el prompt refinado
+        # por el juez genera una nueva.
+        kf_params = {"seed": prompt_seed(kf_prompt),
+                     "negative_prompt": FREE_NEGATIVE_PROMPT}
     pipe.step(
         ps.image,
         model=ps.image_model,
-        prompt=keyframe_prompt(scene, brief, feedback, iteration),
+        prompt=kf_prompt,
         modality=Modality.IMAGE,
         fallback_models=ps.image_fallbacks,
+        params=kf_params,
         metadata={"role": "keyframe", "scene": scene.n, "refined": bool(feedback)},
     )
 
@@ -427,6 +679,74 @@ def demo() -> None:
         assert clip.model == VIDEO_FALLBACKS[0], f"no salto el failover: {clip.model}"
         assert clip.metadata.get("fallback_from") == VIDEO_MODEL, clip.metadata
         chaos.revive(CHAOS_KEY)
+
+        # --- modo free: cableado, prompts, corpus y camino imagen -> video ---
+        # Sin red: se sustituye SOLO el provider de imagen por el mock y se deja
+        # el resto del modo free intacto (Ken Burns, seeds, negative prompt).
+        prev_gen = os.environ.get("GEN_MODE")
+        os.environ["GEN_MODE"] = "free"
+        try:
+            assert gen_mode() == "free"
+            os.environ["GEN_MODE"] = "no-existe"
+            assert gen_mode() == "mock", "un GEN_MODE invalido tiene que degradar a mock"
+            os.environ["GEN_MODE"] = "free"
+
+            sc = scenes[0]
+            wd = tmp / "free"
+            ps = resolve_providers(sc, wd)
+            assert ps.mode == "free", ps.mode
+            assert isinstance(ps.image, CachedPollinations), type(ps.image)
+            assert isinstance(ps.video, KenBurnsProvider), type(ps.video)
+            assert ps.video_model == KEN_BURNS_MODEL, ps.video_model
+            assert ps.video_fallbacks == [KEN_BURNS_FALLBACK], ps.video_fallbacks
+            # --mock manda sobre el env: no romper el camino sin red.
+            assert resolve_providers(sc, wd, mock=True).mode == "mock"
+
+            # Prompt de free: sin numero de escena, sin el brief crudo, sin caras.
+            text = keyframe_prompt(sc, "spot para la marca ACME", None, 0, mode="free")
+            assert "no people" in text and "ACME" not in text, text
+            assert "scene" not in text.lower(), text
+            assert prompt_seed(text) == prompt_seed(text), "la seed no es deterministica"
+            assert prompt_seed(text) != prompt_seed(text + "!"), "la seed no depende del prompt"
+
+            # Corpus: ida y vuelta + clave sensible a la seed.
+            corpus = KeyframeCorpus(tmp / "corpus")
+            png = P.make_keyframe(tmp / "kf.png", label="corpus")
+            k1 = KeyframeCorpus.key("p", model="flux", seed=1, width=1280,
+                                    height=720, negative_prompt=None)
+            k2 = KeyframeCorpus.key("p", model="flux", seed=2, width=1280,
+                                    height=720, negative_prompt=None)
+            assert k1 != k2 and corpus.get(k1) is None
+            corpus.put(k1, png)
+            assert corpus.get(k1) is not None and corpus.get(k2) is None
+            assert corpus.get(k1).read_bytes() == png.read_bytes()
+            assert len(KeyframeCorpus(tmp / "corpus")) == 1, "el index no persiste"
+
+            # El camino real de free salvo la llamada a la red: keyframe local
+            # -> Ken Burns -> fan-in con la voz -> parametros canonicos.
+            ps.image = P.mock_image_provider(wd, label="free")
+            ps.image_model, ps.image_fallbacks = IMAGE_MODEL, []
+            res = build_scene_pipeline(sc, "freejob", brief="spot", workdir=wd,
+                                       providers=ps, cache_dir=None).run(
+                                           raise_on_failure=True)
+            steps = res.run.steps
+            assert all(s.status == StepStatus.SUCCEEDED for s in steps), \
+                [(s.step_index, s.status, s.error) for s in steps]
+            kf = steps[0]
+            assert kf.seed == prompt_seed(kf.prompt), (kf.seed, kf.prompt)
+            assert kf.negative_prompt == FREE_NEGATIVE_PROMPT
+            clip = steps[2].assets[0]
+            assert clip.metadata["motion"] == move_for(sc.n - 1).name, clip.metadata
+            assert clip.metadata["provider"] == "kenburns", clip.metadata
+            free_mp4 = normalize_scene(
+                Path(composite_asset(res).url.replace("file://", "")),
+                tmp / "free.mp4")
+            assert video_params(free_mp4) == video_params(finals[0]), \
+                "una escena free no seria concatenable con una mock"
+        finally:
+            os.environ.pop("GEN_MODE", None)
+            if prev_gen is not None:
+                os.environ["GEN_MODE"] = prev_gen
     finally:
         for key, val in (("CHAOS_FILE", prev_chaos), ("JUDGE_THRESHOLD", prev_judge)):
             os.environ.pop(key, None)
@@ -435,8 +755,9 @@ def demo() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
     print("demo OK: 4 steps, fan-in audio+video en el compositor, parametros "
-          f"identicos entre escenas, lineage por parent_run_id y failover "
-          f"{VIDEO_MODEL} -> {VIDEO_FALLBACKS[0]} con el chaos activo")
+          f"identicos entre escenas, lineage por parent_run_id, failover "
+          f"{VIDEO_MODEL} -> {VIDEO_FALLBACKS[0]} con el chaos activo y modo free "
+          f"cableado (corpus, seed por prompt y clip Ken Burns concatenable)")
 
 
 if __name__ == "__main__":
