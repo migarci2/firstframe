@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280, initial-scale=1">
+<title>FirstFrame — sala de revisión</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b0d10'/><path d='M9 8h14v3.4H12.8v4.3h8.6v3.4h-8.6V24H9z' fill='%23e8eaed'/></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">FF</span>
+    <span class="brand-name">FirstFrame</span>
+    <span class="brand-sub">sala de revisión</span>
+  </div>
+
+  <form class="newspot" id="newspot-form" autocomplete="off">
+    <input id="brief-input" class="brief" type="text" spellcheck="false"
+           placeholder="Brief — p. ej. spot de 15s para una zapatilla de running, luz de amanecer, ciudad vacía">
+    <label class="scene-picker" title="Número de escenas">
+      <span>escenas</span>
+      <select id="scene-count">
+        <option>3</option>
+        <option selected>4</option>
+        <option>6</option>
+      </select>
+    </label>
+    <button class="btn btn-primary" id="btn-newspot" type="submit">New spot</button>
+  </form>
+
+  <div class="sysbar">
+    <span class="sys" id="sys-mode" title="DEMO_MODE del backend">mode <b>—</b></span>
+    <span class="sys" id="sys-b2" title="Conexión con Backblaze B2">B2 <b>—</b></span>
+    <span class="sys sys-stream" id="sys-sse" title="EventSource /api/events">
+      <i class="dot"></i><span class="sys-sse-label">conectando</span>
+    </span>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- ───────────────────────────── columna 1: jobs ───────────────────────────── -->
+  <section class="col col-jobs panel">
+    <div class="panel-head">
+      <h2>Jobs</h2>
+      <span class="count" id="jobs-count">0</span>
+    </div>
+    <div class="joblist" id="joblist">
+      <div class="empty" id="joblist-empty">Cargando jobs…</div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────── columna 2: player ─────────────────────────── -->
+  <section class="col col-stage">
+
+    <div class="stage panel" id="stage">
+      <div class="videowrap" id="videowrap">
+        <video id="player" playsinline muted></video>
+
+        <div class="live-badge" id="live-badge" hidden>
+          <span class="live-dot"></span>
+          <span class="live-text" id="live-text">LIVE — generando escena 1 de 6</span>
+        </div>
+
+        <div class="stage-title" id="stage-title" hidden>
+          <span class="job-id" id="stage-jobid">—</span>
+          <span class="job-name" id="stage-jobname">—</span>
+        </div>
+
+        <div class="player-note" id="player-note" hidden></div>
+
+        <div class="stage-empty" id="stage-empty">
+          <div class="stage-empty-inner">
+            <div class="ff-logo">FF</div>
+            <p>Selecciona un job de la izquierda,<br>o lanza uno nuevo con el brief de arriba.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="playerbar">
+        <button class="btn btn-ghost" id="btn-play" type="button">Play</button>
+        <span class="timecode" id="timecode">0:00 / 0:00</span>
+        <span class="engine" id="engine-badge" title="Motor de reproducción activo">—</span>
+        <span class="spacer"></span>
+        <span class="seg-counter" id="seg-counter">0 segmentos en B2</span>
+        <span class="kbdhint"><kbd>k</kbd> chaos</span>
+      </div>
+    </div>
+
+    <!-- cronómetros: la tesis del producto -->
+    <div class="timers panel" id="timers">
+      <div class="timer timer-first">
+        <span class="timer-label">Primer fotograma</span>
+        <span class="timer-value" id="t-first">—</span>
+      </div>
+      <div class="timer-vs">vs</div>
+      <div class="timer timer-total">
+        <span class="timer-label">Render total</span>
+        <span class="timer-value" id="t-total">—</span>
+      </div>
+      <div class="timer-gain" id="t-gain">
+        <span class="gain-x" id="gain-x">—</span>
+        <span class="gain-label">antes en pantalla</span>
+      </div>
+      <div class="timer-bar" id="timer-bar">
+        <div class="tb-track"><div class="tb-first" id="tb-first"></div></div>
+        <div class="tb-legend"><span id="tb-legend-first">primer fotograma</span><span>render completo</span></div>
+      </div>
+    </div>
+
+    <!-- escenas -->
+    <div class="scenes panel" id="scenes-panel">
+      <div class="panel-head">
+        <h2>Escenas</h2>
+        <span class="count" id="scenes-progress">—</span>
+      </div>
+      <div class="scenestrip" id="scenestrip"></div>
+    </div>
+
+    <!-- revisión -->
+    <div class="review panel" id="review">
+      <div class="review-note">
+        <input id="note-input" class="brief" type="text" spellcheck="false"
+               placeholder="Nota de revisión — p. ej. el logo queda ilegible en el plano detalle">
+        <label class="scene-picker" title="Escena a relanzar en el rechazo">
+          <span>escena</span>
+          <select id="reject-scene"><option value="">última</option></select>
+        </label>
+      </div>
+      <div class="review-actions">
+        <button class="btn btn-reject" id="btn-reject" type="button" disabled>Reject</button>
+        <button class="btn btn-approve" id="btn-approve" type="button" disabled>Approve</button>
+      </div>
+      <div class="lockbadge" id="lockbadge" hidden>
+        <span class="lock-icon">■</span>
+        <div>
+          <b>Object Lock GOVERNANCE · 30 días</b>
+          <span id="lock-until">retención hasta —</span>
+        </div>
+      </div>
+      <div class="review-hint" id="review-hint">Selecciona un job en revisión para aprobarlo o rechazarlo.</div>
+    </div>
+
+  </section>
+
+  <!-- ───────────────────────────── columna 3: rail ───────────────────────────── -->
+  <section class="col col-rail">
+
+    <div class="panel rail-panel" id="agentloop-panel">
+      <div class="panel-head">
+        <h2>AgentLoop</h2>
+        <span class="count" id="agentloop-count">0</span>
+      </div>
+      <div class="rail-body" id="agentloop-body">
+        <div class="empty">Sin iteraciones del juez todavía.</div>
+      </div>
+    </div>
+
+    <div class="panel rail-panel" id="provenance-panel">
+      <div class="panel-head">
+        <h2>Provenance</h2>
+        <button class="btn btn-mini" id="btn-verify" type="button" disabled>Verify</button>
+      </div>
+      <div class="rail-body" id="provenance-body">
+        <div class="empty">Sin manifest todavía.</div>
+      </div>
+    </div>
+
+    <div class="panel rail-panel" id="feed-panel">
+      <div class="panel-head">
+        <h2>Feed en vivo</h2>
+        <span class="count" id="feed-count">0</span>
+      </div>
+      <div class="rail-body feed" id="feed-body">
+        <div class="empty">Esperando eventos de B2…</div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<div class="modal" id="chaos-modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head">Chaos — matar un proveedor en directo</div>
+    <div class="modal-body" id="chaos-list"></div>
+    <div class="modal-foot">
+      <span class="muted">El siguiente `MODEL_ERROR` disparará <code>fallback_models</code>.</span>
+      <button class="btn btn-ghost" id="chaos-close" type="button">Cerrar (Esc)</button>
+    </div>
+  </div>
+</div>
+
+<script src="/vendor/hls.min.js"></script>
+<script src="/mse.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
