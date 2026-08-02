@@ -151,8 +151,16 @@ Mientras el job está vivo lleva `#EXT-X-PLAYLIST-TYPE:EVENT` y **no** lleva `#E
 al terminar aparece `#EXT-X-ENDLIST`. Los `URI`/rutas de los segmentos son **relativos**
 (`seg/00001.ts`), así que resuelven contra el mismo prefijo.
 
+**Para W3 — verificado en Chrome con hls.js 1.5, no hace falta que hagas nada especial:**
+llama a `hls.loadSource('/stream/{id}/index.m3u8')` **inmediatamente** después del
+`POST /api/jobs`. El servidor **retiene** esa primera petición hasta 6 s esperando al
+primer segmento (que llega a ~3 s), así que la primera respuesta ya trae contenido.
+Motivo: si el primer GET devuelve **404**, hls.js lanza `manifestLoadError` FATAL y
+**no reintenta nunca**; si devuelve una playlist EVENT **vacía**, lanza `levelEmptyError`
+con el mismo resultado. Ambos casos probados y descartados.
+
 ```
-404 → aún no hay ningún segmento (el frontend debe reintentar cada ~700 ms)
+404 → el job no existe, o pasaron 6 s sin primer segmento (reintenta cada ~700 ms)
 ```
 
 ### `GET /stream/{job_id}/seg/{name}`

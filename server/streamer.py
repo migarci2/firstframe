@@ -22,6 +22,9 @@ from pathlib import Path
 
 RETRY_TOTAL_S = 2.0
 RETRY_SLEEP_S = 0.25
+# Cuanto aguanta el servidor la PRIMERA peticion del m3u8 esperando al primer segmento.
+# Por debajo del manifestLoadingTimeOut de hls.js (10 s) con margen.
+PLAYLIST_WAIT_S = 6.0
 _RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
 
 
@@ -67,19 +70,35 @@ def _fetch_sync(key: str, byte_range: str | None = None):
 async def read_playlist(job_id: str) -> bytes | None:
     """La playlist se regenera desde la DB: siempre es la version mas fresca.
 
-    Si el job aun no tiene segmentos devuelve None (404) y el front reintenta.
+    VERIFICADO EN CHROME (hls.js 1.5), y las dos alternativas obvias no valen:
+      - devolver 404 en la primera peticion -> `manifestLoadError` FATAL y hls.js **no
+        vuelve a intentarlo nunca**, aunque el segmento aparezca 2 s despues;
+      - devolver una playlist EVENT vacia pero valida -> `levelEmptyError`, mismo final.
+    Como el caso normal de esta app es justo ese (el usuario crea el job y el player se
+    engancha antes de que exista el primer segmento), el servidor **retiene** la primera
+    peticion hasta PLAYLIST_WAIT_S esperando al segmento 1. El first frame llega a los
+    ~3 s y el limite de hls.js son 10 s, asi que la primera respuesta ya trae contenido.
+    404 solo para jobs que no existen o que tardan mas de la cuenta (el front reintenta).
     """
     from server import assembler, db
 
-    try:
-        db.init()
-        segs = db.segments(job_id)
-    except Exception:
-        segs = []
-    if segs:
-        job = db.get_job(job_id)
-        finished = bool(job and job["status"] in ("in_review", "approved", "rejected", "failed"))
-        return assembler.build_playlist(job_id, finished=finished).encode()
+    deadline = asyncio.get_event_loop().time() + PLAYLIST_WAIT_S
+    while True:
+        try:
+            db.init()
+            segs = db.segments(job_id)
+            job = db.get_job(job_id)
+        except Exception:
+            segs, job = [], None
+        if segs:
+            finished = bool(job and job["status"] in ("in_review", "approved",
+                                                      "rejected", "failed"))
+            return assembler.build_playlist(job_id, finished=finished).encode()
+        # job vivo pero aun sin segmentos: esperar en vez de romper el player
+        alive = job is not None and job["status"] in ("queued", "rendering")
+        if not alive or asyncio.get_event_loop().time() >= deadline:
+            break
+        await asyncio.sleep(RETRY_SLEEP_S)
 
     lp = _local_path(job_id)
     if lp.is_file():

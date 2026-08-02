@@ -178,10 +178,14 @@ def _dispatch(ev: dict) -> None:
     at = int(time.time() * 1000)
 
     if key.startswith("incoming/") and key.endswith((".ts", ".m4s")):
-        publish("segment_landed", {"job_id": job_id, "at": at, "key": key,
-                                   "source": ev.get("_source", "b2")})
         from server import db, jobs
 
+        # si el segmento ya esta en la DB es que lo subimos nosotros y el assembler ya
+        # publico su evento: el eco de B2 (webhook o poller) no se repite en la UI.
+        known = {s["key"] for s in db.segments(job_id)} if job_id else set()
+        if key not in known:
+            publish("segment_landed", {"job_id": job_id, "at": at, "key": key,
+                                       "source": ev.get("_source", "b2")})
         j = db.get_job(job_id) if job_id else None
         if j and j["status"] == "queued":
             jobs.mark_rendering(job_id)
