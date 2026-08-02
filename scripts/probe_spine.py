@@ -54,9 +54,12 @@ def main() -> int:
         pngs = [_make_png(Path(tmp), c) for c in ("red", "blue")]
         print(f"1. {len(pngs)} imagenes locales generadas con ffmpeg")
 
+        # preflight=False: for_backblaze() hace un HeadBucket, que es Class B y con
+        # la cuota agotada devuelve 403 y tumba el run antes de generar nada.
         backend = S3StorageBackend.for_backblaze(
             bucket, region=os.environ["B2_REGION"],
-            key_id=os.environ["B2_KEY_ID"], app_key=os.environ["B2_APP_KEY"])
+            key_id=os.environ["B2_KEY_ID"], app_key=os.environ["B2_APP_KEY"],
+            preflight=False)
 
         # manifest_lock: ningun ejemplo oficial lo usa. Deja el manifest WORM en B2.
         lock = ObjectLockConfig(

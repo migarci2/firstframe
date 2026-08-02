@@ -95,10 +95,28 @@ def backend():
         raise RuntimeError("B2 no configurado")
     from genblaze_s3 import S3StorageBackend
 
-    return S3StorageBackend.for_backblaze(
+    # El preflight de genblaze-s3 hace un HeadBucket, que es una transaccion
+    # Class B. Con la cuota diaria de B2 agotada devuelve 403 y tumba el run
+    # ENTERO antes de generar nada, aunque las subidas (Class A) sigan yendo bien.
+    #
+    # `preflight=False` NO lo desactiva: solo lo aplaza a la primera E/S
+    # (backend.py:1763 "leave the verify-on-first-use machinery alone").
+    # Y ese 403 por cuota lo clasifica `is_sticky_preflight_error` como error
+    # permanente, igual que unas credenciales malas, asi que cachea el fallo y
+    # envenena el backend durante toda la vida del proceso.
+    #
+    # Region y bucket ya estan verificados (llevamos toda la noche escribiendo
+    # aqui), asi que marcamos la verificacion como hecha y dejamos que sea la
+    # propia operacion la que falle si de verdad hay un problema.
+    # ponytail: acceso a atributo privado; quitar si el SDK expone una opcion
+    # de verdad para saltarse el preflight (candidato a PR upstream).
+    backend = S3StorageBackend.for_backblaze(
         cfg["B2_BUCKET"], region=cfg["B2_REGION"],
         key_id=cfg["B2_KEY_ID"], app_key=cfg["B2_APP_KEY"],
+        preflight=False,
     )
+    backend._region_verified = True
+    return backend
 
 
 def scene_sink(job_id: str, scene_n: int) -> ObjectStorageSink:

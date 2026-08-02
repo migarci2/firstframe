@@ -138,7 +138,7 @@ async def decide(job_id: str, req: Request):
     except jobs.NotFound:
         return _err(404, "no such job")
     except jobs.NotReviewable as e:
-        return _err(409, "job not reviewable yet", status=str(e))
+        return _err(409, "job not reviewable yet", job_status=str(e))
     return {"ok": True, "job": j}
 
 
