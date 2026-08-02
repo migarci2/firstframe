@@ -24,6 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORK = Path(os.getenv("FIRSTFRAME_WORK", ROOT / "data" / "work"))
+# El runner de W1 escribe SU manifest agregado en `runs/{job}/manifest.json`
+# (pipeline/runner.py: out_dir="runs"). WORK es donde lo deja el runner stub.
+# get_manifest() tiene que mirar en los dos o el panel de provenance se queda a 404.
+RUNS = Path(os.getenv("FIRSTFRAME_RUNS", ROOT / "runs"))
 DEFAULT_SCENES = int(os.getenv("SCENE_COUNT", "6"))
 
 
@@ -360,19 +364,37 @@ def _write_manifest(job_id: str, result: dict | None) -> str | None:
 
 
 def get_manifest(job_id: str) -> dict | None:
+    """El manifest de provenance, venga de donde venga. Nunca lanza.
+
+    Orden: copia local del runner real (`runs/`), copia local del stub (`data/work/`),
+    y solo como ultimo recurso B2. El orden importa: leer de B2 es una transaccion
+    Class B y la cuenta tiene tope diario; ademas el panel de provenance tiene que
+    seguir funcionando con la cuota agotada.
+
+    Este endpoint devolvia 500 con la cuota agotada: `b2.get_bytes` propagaba el
+    ClientError del cap y nadie lo cazaba, asi que TODO job con `manifest_key`
+    (o sea, todo job terminado o aprobado) reventaba con 500 y el resto daba 404.
+    Aqui se cierra por completo: cualquier fallo se convierte en None -> 404 limpio.
+    """
     from server import b2, db
 
     db.init()
     j = db.get_job(job_id)
     if not j:
         return None
-    local = WORK / job_id / "manifest.json"
-    if local.is_file():
-        return json.loads(local.read_text())
+    for local in (RUNS / job_id / "manifest.json", WORK / job_id / "manifest.json"):
+        try:
+            if local.is_file():
+                return json.loads(local.read_text())
+        except (OSError, ValueError) as e:
+            print(f"[jobs] WARN manifest local ilegible {local}: {e!r}")
     if j["manifest_key"] and b2.available():
-        got = b2.get_bytes(j["manifest_key"])
-        if got:
-            return json.loads(got[0])
+        try:
+            got = b2.get_bytes(j["manifest_key"])
+            if got:
+                return json.loads(got[0])
+        except Exception as e:   # cap de transacciones, red, JSON corrupto...
+            print(f"[jobs] WARN manifest no leible de B2 ({j['manifest_key']}): {e!r}")
     return None
 
 
