@@ -8,3 +8,6 @@ __pycache__/
 dist/
 .venv/
 __pycache__/
+data/
+runs/
+.cache/
