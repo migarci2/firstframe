@@ -13,15 +13,15 @@ y el SDK cae al bueno.
     set -a && . ./.env && set +a && .venv/bin/python scripts/probe_free_provider.py
 
 Modos:
-    (sin flags)  intenta B2 y, si la cuenta esta capada, cae a backend local
+    (sin flags)  sube de verdad a B2 (subir es Class A: gratis y sin cap)
     --local      salta B2 y verifica solo el camino pipeline -> sink -> manifest
 
 Codigos de salida:
     0  todo OK
     1  fallo de verdad (mi codigo o el provider)
-    2  el pipeline y el manifest verifican, pero B2 esta bloqueado por CUENTA
-       (transaction_cap_exceeded). No es un fallo de codigo: hay que subir el
-       cap en la pagina "Caps & Alerts" de Backblaze.
+    2  todo subido y manifest verificado, pero NO se pudo releer de B2: la
+       cuenta tiene el cap de transacciones alcanzado (LIST/GET dan 403). No
+       es un fallo de codigo: subir el cap en Backblaze > Caps & Alerts.
 
 Notas que cuestan una hora si se olvidan:
   - `Pipeline(..., preflight=False)` SIEMPRE: el preflight usa `validate_model()`,
@@ -69,9 +69,10 @@ SAMPLES_DIR = Path("/tmp/free-provider-samples")
 class MemoryStorageBackend(StorageBackend):
     """Backend en memoria para verificar el camino sink -> manifest sin red.
 
-    Existe SOLO porque la cuenta de B2 esta capada (transaction_cap_exceeded) y
-    sin esto no habria forma de demostrar hoy que el manifest verifica. Cumple
-    el mismo contrato que S3StorageBackend, asi que lo que pasa aqui pasa en B2.
+    Para `--local`: permite verificar el camino completo pipeline -> sink ->
+    manifest sin gastar una sola transaccion de Backblaze (util con la cuenta
+    capada, y para iterar rapido). Cumple el mismo contrato que
+    S3StorageBackend, asi que lo que verifica aqui verifica en B2.
     """
 
     def __init__(self, bucket: str = "memory") -> None:
@@ -112,15 +113,32 @@ def _s3():
     )
 
 
+def _is_cap_error(exc: Exception) -> bool:
+    """True si el error es el cap de transacciones de la cuenta de Backblaze."""
+    return "transaction cap exceeded" in str(exc).lower()
+
+
 def _make_b2_backend() -> tuple[StorageBackend | None, str]:
-    """(backend, motivo). backend=None cuando B2 no esta disponible."""
+    """(backend, motivo). backend=None cuando B2 no esta disponible.
+
+    Con la cuenta capada hay que esquivar DOS HeadBucket, ambos Class B (que es
+    justo lo que esta capado) y ninguno necesario para subir:
+      - `preflight=True` (default) HEADea el bucket al construir.
+      - `put()` llama a `_ensure_region_verified()`, que HEADea otra vez para
+        autodetectar la region por redirect. Pasamos `region=` explicita, asi
+        que no hay nada que autodetectar.
+    Marcamos la region como verificada a mano. Verificado: con esto `put()`
+    sube a B2 correctamente aun con el cap alcanzado (subir es Class A, gratis).
+    """
     try:
         backend = S3StorageBackend.for_backblaze(
             os.environ["B2_BUCKET"], region=os.environ["B2_REGION"],
             key_id=os.environ["B2_KEY_ID"], app_key=os.environ["B2_APP_KEY"],
+            preflight=False,
         )
+        backend._region_verified = True  # noqa: SLF001 — ver docstring
         return backend, "ok"
-    except StorageError as exc:
+    except (StorageError, ValueError) as exc:
         return None, str(exc)
 
 
@@ -196,41 +214,72 @@ def main() -> int:
         return 1
 
     # --- Objetos subidos ----------------------------------------------------
+    # Las URLs de los assets ya vienen reescritas por el sink a la URL durable
+    # del backend: eso es la prueba de que el sink los subio.
+    uploaded = [a.url for s in result.run.steps for a in (s.assets or [])]
+    read_back_capped = False
     if using_b2:
-        listing = [(o["Key"], o["Size"])
-                   for o in _s3().list_objects_v2(
-                       Bucket=bucket, Prefix=PREFIX).get("Contents", [])]
+        try:
+            listing = [(o["Key"], o["Size"])
+                       for o in _s3().list_objects_v2(
+                           Bucket=bucket, Prefix=PREFIX).get("Contents", [])]
+        except Exception as exc:  # noqa: BLE001
+            if not _is_cap_error(exc):
+                raise
+            # LIST es Class C y esta capado; la subida (Class A) si funciono.
+            read_back_capped = True
+            listing = []
         where = f"b2://{bucket}/{PREFIX}/"
     else:
         listing = [(k, len(v)) for k, v in backend.objects.items()]
         where = "memoria"
-    print(f"3. {len(listing)} objetos en {where}")
-    for key, size in listing[:10]:
-        print(f"     {size:>9,} B  {key}")
-    if not listing:
-        print("FALLO: el sink no subio nada")
-        return 1
 
-    images = [(k, s) for k, s in listing if not k.endswith(".json")]
-    if len(images) < len(PROMPTS):
-        print(f"FALLO: esperaba {len(PROMPTS)} imagenes, hay {len(images)}")
-        return 1
-    if any(s < 1024 for _, s in images):
-        print("FALLO: alguna imagen subida pesa menos de 1 KB")
+    if read_back_capped:
+        print(f"3. {len(uploaded)} assets subidos a {where} "
+              f"(LIST bloqueado por el cap, no puedo releer)")
+        for url in uploaded[:10]:
+            print(f"     {url}")
+    else:
+        print(f"3. {len(listing)} objetos en {where}")
+        for key, size in listing[:10]:
+            print(f"     {size:>9,} B  {key}")
+        if not listing:
+            print("FALLO: el sink no subio nada")
+            return 1
+        images = [(k, s) for k, s in listing if not k.endswith(".json")]
+        if len(images) < len(PROMPTS):
+            print(f"FALLO: esperaba {len(PROMPTS)} imagenes, hay {len(images)}")
+            return 1
+        if any(s < 1024 for _, s in images):
+            print("FALLO: alguna imagen subida pesa menos de 1 KB")
+            return 1
+
+    if len(uploaded) < len(PROMPTS):
+        print(f"FALLO: esperaba {len(PROMPTS)} assets subidos, hay {len(uploaded)}")
         return 1
 
     # --- Manifest -----------------------------------------------------------
+    # Con el cap activo no se puede releer de B2, asi que se verifica el
+    # manifest que el sink serializo (`result.manifest`) — el MISMO objeto que
+    # subio, byte por byte.
     manifests = [k for k, _ in listing if k.endswith(".json")]
-    if not manifests:
+    source = "releido de B2" if using_b2 else "releido del backend en memoria"
+    if manifests and not read_back_capped:
+        key = manifests[0]
+        body = (_s3().get_object(Bucket=bucket, Key=key)["Body"].read()
+                if using_b2 else backend.get(key))
+        manifest = parse_manifest(json.loads(body))
+    elif read_back_capped:
+        manifest = result.manifest
+        key = f"manifests/{result.run.run_id}.json"
+        source = "en memoria (GET bloqueado por el cap)"
+    else:
         print("FALLO: el sink no dejo manifest .json")
         return 1
-    key = manifests[0]
-    body = (_s3().get_object(Bucket=bucket, Key=key)["Body"].read()
-            if using_b2 else backend.get(key))
-    manifest = parse_manifest(json.loads(body))
+
     ok = manifest.verify()
     missing = manifest.output_asset_ids_missing_sha256()
-    print(f"4. manifest {key}")
+    print(f"4. manifest {key}  [{source}]")
     print(f"     verify()           -> {ok}")
     print(f"     hash canonico      -> {manifest.verify_hash()}")
     print(f"     outputs sin sha256 -> {missing or 'ninguno'}")
@@ -239,17 +288,23 @@ def main() -> int:
         return 1
 
     print()
-    if using_b2:
+    if using_b2 and not read_back_capped:
         print("GO: prompt -> imagen REAL -> pipeline Genblaze -> B2 -> manifest verificado.")
         rc = 0
+    elif using_b2:
+        print("GO: prompt -> imagen REAL -> pipeline Genblaze -> B2. Las imagenes y el")
+        print("    manifest ESTAN subidos (subir es Class A, gratis y sin cap) y el")
+        print("    manifest verifica.")
+        print("AVISO: la cuenta de Backblaze tiene el cap de transacciones alcanzado,")
+        print("  asi que LIST y GET devuelven 403 y no se puede releer lo subido")
+        print("  (tampoco desde la consola web). Subir el cap en Backblaze >")
+        print("  Caps & Alerts y volver a lanzar para la verificacion completa.")
+        rc = 2
     else:
         print("GO PARCIAL: prompt -> imagen REAL -> pipeline Genblaze -> sink -> "
-              "manifest verificado.")
-        print("BLOQUEO EXTERNO: la cuenta de Backblaze devuelve 403 "
-              "transaction_cap_exceeded en b2_authorize_account, asi que NINGUNA")
-        print("  subida a B2 funciona ahora mismo (tampoco probe_spine.py). Hay que")
-        print("  subir el cap en Backblaze > Caps & Alerts. En cuanto este, este")
-        print("  mismo script pasa a B2 solo, sin tocar una linea.")
+              "manifest verificado, pero SIN tocar B2 (backend en memoria).")
+        print(f"  Motivo: {b2_reason[:150]}")
+        print("  Lanza sin --local para subir de verdad a Backblaze.")
         rc = 2
     print(f"    Juzga la calidad en: {SAMPLES_DIR}/")
     return rc
