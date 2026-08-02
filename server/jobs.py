@@ -239,6 +239,16 @@ def _call_runner(runner, job_id: str, brief: str, scene_count: int, on_scene, on
             kind, d = args[0], dict(args[1] if len(args) > 1 else {})
         else:
             return None
+        if kind == "provider_failover":
+            # El runner emite el failover como {"role","from","to"} (runner.py:552).
+            # El contrato de la UI habla de model/fallback_model. Sin esta traduccion
+            # el toast de failover salia "modelo MODEL_ERROR -> fallback: —", que es
+            # justo el plano del guion donde tienen que leerse los dos modelos.
+            d.setdefault("model", d.get("from"))
+            d.setdefault("fallback_model", d.get("to"))
+            d.setdefault("provider", "gmicloud")
+            d["detail"] = (f"{d.get('role', 'clip')}: MODEL_ERROR en {d.get('model')} "
+                           f"-> {d.get('fallback_model')}")
         d.setdefault("detail", d.get("path") or d.get("model") or "")
         if kind in ("scene_started", "scene_ready", "job_started", "job_complete"):
             kind_out = "provider_call"

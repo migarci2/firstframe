@@ -43,6 +43,11 @@ def _startup() -> None:
     from server import db, events, jobs
 
     db.init()
+    # Los dos almacenes de chaos (sqlite para la UI, data/chaos.json para el pipeline)
+    # se sincronizan al arrancar: si el proceso murio con un proveedor muerto, la UI y
+    # el pipeline tienen que coincidir antes del primer job.
+    for p in db.dead_providers():
+        _mirror_chaos(p, True)
     jobs.resume_orphans()
     jobs.warm_runner()
     events.start(app)
@@ -233,9 +238,26 @@ async def chaos(req: Request):
     from server import db, events
 
     state = db.set_chaos(provider, dead)
+    _mirror_chaos(provider, state)
     events.publish("chaos", {"provider": provider, "dead": state,
                              "at": int(time.time() * 1000), "job_id": None})
     return {"provider": provider, "dead": state}
+
+
+def _mirror_chaos(provider: str, dead: bool) -> None:
+    """El pipeline NO lee la DB.
+
+    `pipeline/chaos.py` guarda los flags en `data/chaos.json` a proposito (el runner
+    corre en otro thread y no queremos acoplar `pipeline/` a sqlite). Sin este espejo
+    el boton de chaos era decorativo: la UI ponia el proveedor en MUERTO, la DB tambien,
+    y `ChaosWrapper` seguia delegando tan feliz -> el failover no se veia nunca.
+    """
+    try:
+        from pipeline import chaos as pchaos
+
+        pchaos.kill(provider) if dead else pchaos.revive(provider)
+    except Exception as e:      # noqa: BLE001 — nunca tumbar el endpoint por esto
+        print(f"[app] WARN chaos no propagado a pipeline/chaos.py: {e!r}")
 
 
 # ---------------------------------------------------------------- provenance

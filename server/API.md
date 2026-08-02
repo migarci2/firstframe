@@ -188,7 +188,10 @@ internamente hasta ~2 s antes de devolver 404.
 req  → { "provider": "gmicloud", "dead": true }   // dead opcional, default true (toggle si se omite)
 200  → { "provider": "gmicloud", "dead": true }
 ```
-Marca un proveedor como muerto en la DB. `pipeline/chaos.py:is_dead(name)` lo lee.
+Marca un proveedor como muerto. Escribe en **los dos** almacenes: la tabla `chaos` de
+sqlite (lo que lee la UI) y `data/chaos.json`, que es lo que lee de verdad
+`pipeline/chaos.py:is_dead(name)` — el pipeline corre en otro thread y no toca sqlite.
+Se sincronizan también al arrancar el servidor.
 
 ### `GET /api/verify/{job_id}`
 Corre `genblaze verify` server-side sobre el final aprobado.
