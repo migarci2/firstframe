@@ -167,6 +167,7 @@ def _run_job(job_id: str, brief: str, scene_count: int, t0: float) -> None:
 
     assembler.finish(job_id)
     total = int((time.time() - t0) * 1000)
+    db.update_job(job_id, total_render_ms=total)   # antes del manifest: va dentro de el
     manifest_key = (result or {}).get("manifest_key") or _write_manifest(job_id, result)
     db.set_status(job_id, "in_review", total_render_ms=total, manifest_key=manifest_key)
     events.publish("render_complete", {"job_id": job_id, "total_render_ms": total,
@@ -327,38 +328,44 @@ def _approve(job_id: str) -> dict:
             "size": final.stat().st_size}
 
 
-def _embed_manifest(job_id: str, mp4: Path) -> bool:
-    """Embebe el manifest en el MP4 con las utilidades de genblaze si estan disponibles.
+def _genblaze_manifest(job_id: str):
+    """Manifest de genblaze para el job.
 
-    Si el helper no existe en esta version del SDK, se sigue adelante: el manifest ya
-    esta como objeto en `provenance/` y el approve no se cae por esto.
+    Si el pipeline (W1) dejo un manifest con el esquema del SDK, se reusa tal cual
+    (`parse_manifest`). Si no —modo stub—, se construye uno sintetico: todos los campos
+    de `Run` son opcionales, asi que `Manifest(run=Run(...))` es valido y su
+    `compute_hash()/verify()` son los de verdad, no un mock.
     """
+    from genblaze import Manifest, parse_manifest
+    from genblaze_core.models.run import Run
+
     doc = get_manifest(job_id) or {}
     try:
-        from genblaze_provenance import SmartEmbedder  # type: ignore
-
-        SmartEmbedder().embed(str(mp4), doc)
-        return True
+        return parse_manifest(doc)
     except Exception:
         pass
-    try:
-        from genblaze_provenance.handlers import Mp4Handler  # type: ignore
+    return Manifest(run=Run(run_id=job_id, name=f"firstframe/{job_id}",
+                            metadata={k: v for k, v in doc.items()
+                                      if k in ("job_id", "brief", "mode", "created_at",
+                                               "first_frame_ms", "total_render_ms",
+                                               "scenes", "segments", "provider_events")}))
 
-        Mp4Handler().embed(str(mp4), json.dumps(doc, default=str))
-        return True
-    except Exception:
-        pass
-    # fallback honesto: metadata de comentario con el manifest (ffmpeg)
+
+def _embed_manifest(job_id: str, mp4: Path) -> bool:
+    """Embebe el manifest de provenance DENTRO del mp4 (caja uuid de genblaze).
+
+    `Mp4Handler.embed` es la ruta real del SDK; el objeto en `provenance/` sigue
+    existiendo aparte. Si algo falla, el approve no se cae: se registra y se sigue.
+    """
     try:
-        tmp = mp4.with_suffix(".embed.mp4")
-        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(mp4),
-                        "-c", "copy", "-movflags", "use_metadata_tags",
-                        "-metadata", f"firstframe_manifest={json.dumps(doc, default=str)[:8000]}",
-                        str(tmp)], check=True, capture_output=True)
-        tmp.replace(mp4)
+        from genblaze_core.media.mp4 import Mp4Handler
+
+        out = mp4.with_suffix(".embedded.mp4")
+        Mp4Handler().embed(str(mp4), _genblaze_manifest(job_id), str(out))
+        out.replace(mp4)
         return True
     except Exception as e:
-        print(f"[jobs] WARN embed manifest fallo: {e}")
+        print(f"[jobs] WARN embed manifest fallo: {e!r}")
         return False
 
 
@@ -390,16 +397,46 @@ def verify(job_id: str) -> dict | None:
     if not final.is_file():
         return {"ok": False, "verified": False, "exit_code": -1,
                 "output": "no hay final.mp4 local"}
+
+    # El CLI `genblaze verify` no viene con el paquete instalado (0.4.5 no declara
+    # entry_points), asi que se hace lo mismo en proceso con el SDK: extraer el
+    # manifest embebido del MP4 y verificar su hash canonico.
     exe = ROOT / ".venv" / "bin" / "genblaze"
-    cmd = [str(exe) if exe.is_file() else "genblaze", "verify", str(final), "--fetch"]
+    if exe.is_file():
+        cmd = [str(exe), "verify", str(final), "--fetch"]
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+            return {"ok": True, "verified": p.returncode == 0, "exit_code": p.returncode,
+                    "output": (p.stdout + p.stderr).strip()[:8000], "cmd": " ".join(cmd)}
+        except Exception as e:
+            print(f"[jobs] CLI genblaze fallo, uso el SDK: {e!r}")
+
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-        out = (p.stdout + p.stderr).strip()
-        return {"ok": True, "verified": p.returncode == 0, "exit_code": p.returncode,
-                "output": out[:8000], "cmd": " ".join(cmd)}
+        from genblaze_core.media.mp4 import Mp4Handler
+
+        m = Mp4Handler().extract(str(final))
+        report = m.verification_report()
+        lines = [
+            f"file:            {final.name} ({final.stat().st_size:,} bytes)",
+            f"manifest:        embebido en la caja uuid de genblaze",
+            f"schema_version:  {m.schema_version}",
+            f"run_id:          {m.run.run_id}",
+            f"canonical_hash:  {m.canonical_hash or m.compute_hash()}",
+            f"hash_ok:         {report.hash_ok}",
+            f"invalid_metadata:{list(report.invalid_metadata_ids)}",
+            f"verify():        {m.verify()}",
+        ]
+        b2key = f"approved/{job_id}/manifest.json"
+        from server import b2
+
+        if b2.available():
+            ret = b2.get_retention(b2key)
+            lines.append(f"b2 manifest:     {b2key} lock={ret}")
+        return {"ok": True, "verified": bool(m.verify()), "exit_code": 0,
+                "output": "\n".join(lines), "cmd": "genblaze SDK: Mp4Handler.extract + Manifest.verify"}
     except Exception as e:
-        return {"ok": False, "verified": False, "exit_code": -1, "output": str(e),
-                "cmd": " ".join(cmd)}
+        return {"ok": False, "verified": False, "exit_code": -1,
+                "output": f"no se pudo verificar: {e!r}", "cmd": "sdk"}
 
 
 # ------------------------------------------------------------------ arranque
@@ -469,6 +506,11 @@ def demo() -> None:
     assert final.is_file() and final.stat().st_size > 10000
     print(f"6. approve OK -> final.mp4 {final.stat().st_size/1024:.0f} KiB "
           f"lock={out['lock']}")
+
+    v = verify(jid)
+    assert v and v["verified"] is True, v
+    assert "hash_ok:         True" in v["output"], v["output"]
+    print("6b. manifest embebido y verificado con el SDK de genblaze OK")
 
     from server import b2
 
