@@ -28,7 +28,7 @@ Notas que cuestan una hora si se olvidan:
     que esta invertido (issue #248).
   - `ObjectStorageSink` es de UN SOLO USO: se cierra al terminar el run.
   - El tier anonimo de Pollinations serializa a 1 request por IP, asi que N
-    escenas tardan ~N x 30s. Con 2 steps son ~60s de reloj en el peor caso.
+    escenas tardan ~N x 45s (medido). Con 2 steps, ~90s de reloj en frio.
 """
 import json
 import os

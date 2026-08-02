@@ -21,9 +21,16 @@ Realidad medida del tier anonimo (2026-08-03)
 ---------------------------------------------
 - Sin token: cola de 1 request por IP (`maxAllowed: 1`). Un segundo request
   concurrente devuelve 429 con `{"error": "Too Many Requests"}` al instante.
-- Latencia: ~1.7s cuando la cola esta vacia y frIA, ~32s en regimen permanente.
+- Latencia REAL medida (4 generaciones seguidas con seeds frescas):
+  min 44.9s / media 46.9s / max 52.8s. El ~1.7s que se ve a veces es la cola
+  vacia y fria, no el regimen permanente — no te fies de la primera medida.
   El intervalo NO depende de la resolucion (512x288 tarda lo mismo que
   1024x576), asi que es rate limiting, no tiempo de generacion.
+  Traduccion: N escenas = N x ~45s. Para 3 escenas, ~2 min de reloj.
+  Un token gratis de enter.pollinations.ai (GitHub OAuth, sin tarjeta) quita
+  la cola de 1 y baja esto a segundos; se lee de POLLINATIONS_TOKEN.
+- El cache del pipeline de Genblaze hace que re-ejecutar el mismo prompt+seed
+  sea instantaneo. Para ensayar la demo, deja los seeds fijos.
 - `GET /models` en anonimo devuelve `["sana"]`. Pedir `model=flux` responde 200
   pero el EXIF delata `manufacturer=sana`: el tier anonimo degrada al mismo
   modelo. Mantenemos "flux" como modelo nominal porque (a) la API lo acepta y
