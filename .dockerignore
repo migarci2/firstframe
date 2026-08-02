@@ -1,0 +1,39 @@
+# --- secretos: JAMAS dentro de la imagen ---
+.env
+.env.*
+!.env.example
+
+# --- entornos y caches locales ---
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- estado local: la app lo regenera en /data dentro del contenedor ---
+data/
+runs/
+out/
+tmp/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- material de investigacion y spikes: no forma parte del runtime ---
+research/
+spike/
+
+# --- control de versiones y tooling ---
+.git/
+.gitignore
+.github/
+.idea/
+.vscode/
+node_modules/
+Dockerfile
+.dockerignore
+fly.toml

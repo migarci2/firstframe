@@ -1,0 +1,97 @@
+# FirstFrame - despliegue en Fly.io.
+#
+# Por que Fly y no serverless: el assembler sube segmentos fMP4 a B2 MIENTRAS el
+# pipeline sigue generando escenas, y el navegador mantiene un SSE abierto todo el
+# rato. Eso necesita un proceso vivo entre peticiones, no una funcion de 10 s.
+#
+# Region `ams`: el bucket vive en eu-central-003 (Amsterdam). Mismo sitio que los
+# datos = latencia minima en el camino critico (subida de segmentos y proxy HLS).
+#
+# ---------------------------------------------------------------------------
+# DESPLIEGUE (comandos exactos, en este orden)
+#
+#   curl -L https://fly.io/install.sh | sh          # si no esta flyctl
+#   fly auth login
+#   fly apps create firstframe --org personal       # una sola vez
+#
+#   # secretos: NUNCA en este fichero. Se usa la key RESTRINGIDA del servidor
+#   # (infra/make_keys.py -> firstframe-server), no la master de la cuenta.
+#   fly secrets set \
+#       B2_KEY_ID="$B2_SERVER_KEY_ID" \
+#       B2_APP_KEY="$B2_SERVER_APP_KEY" \
+#       B2_WEBHOOK_SECRET="$B2_WEBHOOK_SECRET" \
+#       NVIDIA_API_KEY="$NVIDIA_API_KEY" \
+#       OPENAI_API_KEY="$OPENAI_API_KEY" \
+#       GMI_API_KEY="$GMI_API_KEY"
+#
+#   fly deploy --ha=false                           # <- EL COMANDO
+#   fly logs
+#   fly open                                        # https://firstframe.fly.dev
+#
+# Persistencia (OPCIONAL, no hace falta para la demo: demo/seed.py reconstruye el
+# estado al arrancar). Si se quiere que la DB sobreviva a un redeploy:
+#   fly volumes create firstframe_data --region ams --size 3 --yes
+# y descomentar el bloque [mounts] de abajo.
+#
+# Plan B si Fly da guerra (§8 del PLAN, recorte 7):
+#   uvicorn server.app:app --port 8000 & cloudflared tunnel --url http://localhost:8000
+# ---------------------------------------------------------------------------
+
+app = "firstframe"
+primary_region = "ams"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Una sola maquina con estado en memoria (cola de eventos + assembler):
+  # nada de rolling, que exigiria dos maquinas sirviendo a la vez.
+  strategy = "immediate"
+
+[env]
+  DEMO_MODE = "mock"
+  # Event Notifications API gated en esta cuenta (400 "API not enabled"):
+  # server/events.py:Poller emite los mismos eventos internos. Ver infra/b2_setup.py.
+  EVENTS_MODE = "poll"
+  PORT = "8000"
+  B2_REGION = "eu-central-003"
+  B2_BUCKET = "genblaze-review-migarci2"
+  PUBLIC_BASE_URL = "https://firstframe.fly.dev"
+  FIRSTFRAME_DB = "/data/firstframe.db"
+  FIRSTFRAME_WORK = "/data/work"
+  FIRSTFRAME_HLS = "/data/hls"
+  CHAOS_FILE = "/data/chaos.json"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_start_machines = true
+  # NO se apaga sola: hay renders en background y SSE abiertos. Una maquina
+  # dormida a mitad de render seria una demo rota.
+  auto_stop_machines = "off"
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 60
+    hard_limit = 120
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "15s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  # ffmpeg remuxando fMP4 mientras corre el pipeline: 2 vCPU y 2 GB.
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+# Descomentar SOLO tras `fly volumes create firstframe_data --region ams --size 3`.
+# [mounts]
+#   source = "firstframe_data"
+#   destination = "/data"
