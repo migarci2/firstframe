@@ -17,6 +17,7 @@ var S = {
   iters: {},           // job_id -> entradas del AgentLoop
   chaos: {},           // provider -> dead:bool
   health: null,
+  hideFailed: false,   // el revisor no quiere ver renders muertos
   nowTimer: null
 };
 
@@ -196,6 +197,16 @@ var Player = {
       ? 'Esperando el primer segmento en B2… el player arranca con 2 segmentos.'
       : null);
 
+    // ?player=mse|native fuerza el motor (para probar el plan B sin tocar código).
+    var forced = (/[?&]player=(\w+)/.exec(location.search) || [])[1];
+    if (forced === 'mse') { this.fallbackMse(url); return; }
+    if (forced === 'native') {
+      this.setEngine('nativo');
+      this.video.src = url;
+      this.video.play().catch(function () {});
+      return;
+    }
+
     // 1) hls.js (vendorizado en web/vendor/, sin CDN).
     if (window.Hls && window.Hls.isSupported()) {
       this.setEngine('hls.js');
@@ -285,13 +296,41 @@ var Player = {
     this.setEngine('mse');
     var p = window.FFMse.create(this.video);
     this.mse = p;
+
+    // Chrome declara soportar 'video/mp2t' pero su demuxer aborta en la frontera
+    // de escena ("Parsed buffers not in DTS sequence"): por eso hls.js remuxa a
+    // fMP4 y es el motor primario. Aquí lo detectamos por el error del <video>
+    // (no llega como evento nuestro) y degradamos con un mensaje visible.
+    var onMediaErr = function () {
+      if (self.mse !== p) return;
+      var why = (self.video.error && self.video.error.message) || 'error de media';
+      self.video.removeEventListener('error', onMediaErr);
+      self.note('MSE no puede con estos segmentos MPEG-TS (' + why.split(':')[0] +
+                '); usando el player nativo.', true);
+      try { p.destroy(); } catch (err) {}
+      self.mse = null;
+      self.setEngine('nativo');
+      self.video.src = url;
+      self.video.play().catch(function () {});
+    };
+    this.video.addEventListener('error', onMediaErr);
     p.on('ready', function () {
       self.note(null);
       self.video.play().catch(function () {
         self.note('Autoplay bloqueado por el navegador — pulsa Play.');
       });
     });
-    p.on('error', function (e) { if (e.fatal) self.note('MSE: ' + e.reason, true); });
+    p.on('error', function (e) {
+      if (!e.fatal) return;
+      // Chrome no acepta MPEG-TS por MSE (por eso hls.js remuxa). Degradamos al
+      // player nativo y lo decimos, en vez de quedarnos en negro.
+      self.note('MSE no puede con estos segmentos (' + e.reason + '); usando el player nativo.', true);
+      try { p.destroy(); } catch (err) {}
+      self.mse = null;
+      self.setEngine('nativo');
+      self.video.src = url;
+      self.video.play().catch(function () {});
+    });
     p.load(url);
   }
 };
@@ -304,17 +343,29 @@ function updateTimecode() {
 
 /* ═════════════════════════════ render: lista de jobs ══════════════════════ */
 
+function visibleJobs() {
+  if (!S.hideFailed) return S.jobs;
+  return S.jobs.filter(function (j) { return j.status !== 'failed' || j.id === S.sel; });
+}
+
 function renderJobs() {
   var list = $('joblist');
+  var scroll = list.scrollTop;   // un job_update cada segundo no debe mover la lista
   clear(list);
-  $('jobs-count').textContent = S.jobs.length;
+  var shown = visibleJobs();
+  $('jobs-count').textContent = shown.length === S.jobs.length
+    ? String(S.jobs.length)
+    : shown.length + '/' + S.jobs.length;
 
-  if (!S.jobs.length) {
-    list.appendChild(el('div', 'empty', 'No hay jobs todavía. Pega un brief arriba y pulsa "New spot".'));
+  if (!shown.length) {
+    list.appendChild(el('div', 'empty', S.jobs.length
+      ? 'Todos los jobs están en estado "failed". Pulsa "todos" para verlos.'
+      : 'No hay jobs todavía. Pega un brief arriba y pulsa "New spot".'));
+    list.scrollTop = scroll;
     return;
   }
 
-  S.jobs.forEach(function (job) {
+  shown.forEach(function (job) {
     var row = el('button', 'jobrow' + (job.id === S.sel ? ' sel' : ''));
     row.type = 'button';
     row.setAttribute('data-job', job.id);
@@ -337,6 +388,7 @@ function renderJobs() {
     row.addEventListener('click', function () { select(job.id); });
     list.appendChild(row);
   });
+  list.scrollTop = scroll;
 }
 
 /* ═════════════════════════════ render: cronómetros ════════════════════════ */
@@ -550,12 +602,18 @@ function renderProvenance() {
   });
   body.appendChild(lin);
 
-  // Objetos en B2
+  // Objetos que hay realmente en el bucket
   var objs = (S.detail && S.detail.job && S.detail.job.id === job.id) ? (S.detail.objects || []) : [];
   if (objs.length) {
+    var ob = el('div', 'lineage');
+    ob.appendChild(el('div', 'iter-top', 'OBJETOS EN B2 (' + objs.length + ')'));
     objs.slice(0, 8).forEach(function (o) {
-      row(String(Math.round((o.size || 0) / 1024) + ' KiB'), o.key);
+      var n = el('div', 'lin-node');
+      n.appendChild(el('span', 'rail', '·'));
+      n.appendChild(el('span', 'tag', o.key + (o.size ? '  ' + Math.round(o.size / 1024) + ' KiB' : '')));
+      ob.appendChild(n);
     });
+    body.appendChild(ob);
   }
 
   // Manifest
@@ -964,7 +1022,6 @@ function bootstrapJobs() {
     S.jobs = d.jobs || [];
     renderJobs();
     if (!S.sel && S.jobs.length) select(pickDefaultJob().id);
-    else if (!S.jobs.length) $('joblist-empty') && null;
   }).catch(function (e) {
     var list = $('joblist');
     clear(list);
@@ -996,6 +1053,11 @@ function start() {
   $('btn-approve').addEventListener('click', function () { decide('approve'); });
   $('btn-reject').addEventListener('click', function () { decide('reject'); });
   $('btn-verify').addEventListener('click', verify);
+  $('btn-filter').addEventListener('click', function () {
+    S.hideFailed = !S.hideFailed;
+    this.textContent = S.hideFailed ? 'sin fallidos' : 'todos';
+    renderJobs();
+  });
   $('chaos-close').addEventListener('click', function () { toggleChaos(false); });
   $('chaos-modal').addEventListener('click', function (e) {
     if (e.target === $('chaos-modal')) toggleChaos(false);

@@ -15,11 +15,19 @@
  * assembler emite #EXT-X-DISCONTINUITY). En `sequence` el navegador encadena
  * cada append detrás del anterior y la discontinuidad deja de importar.
  *
- * Limitación honesta: MSE no acepta MPEG-TS salvo que el navegador declare
- * soportar 'video/mp2t' (casi ninguno lo hace; hls.js remuxa a fMP4 por eso).
- * Con segmentos fMP4 (.m4s/.mp4 + #EXT-X-MAP) esto funciona en cualquier
- * Chrome. `isSupported(playlistText)` lo decide antes de intentarlo, para que
- * app.js pueda degradar sin romper nada.
+ * Limitación honesta, medida en este Chrome (no leída en docs): con los
+ * segmentos MPEG-TS que produce hoy el assembler,
+ * `MediaSource.isTypeSupported('video/mp2t')` devuelve **true** pero el demuxer
+ * aborta en la primera frontera de escena con
+ * `CHUNK_DEMUXER_ERROR_APPEND_FAILED: Parsed buffers not in DTS sequence`
+ * (probado con y sin `abort()` + `timestampOffset` en la discontinuidad).
+ * Ésa es exactamente la razón por la que hls.js remuxa TS a fMP4, y por la que
+ * hls.js es el motor primario de app.js.
+ *
+ * Con segmentos fMP4 (`.m4s`/`.mp4` + `#EXT-X-MAP`) —el plan B de encode del
+ * §5 del plan— este player sí funciona en Chrome sin dependencias. Si el
+ * append falla, `app.js` lo detecta por el `error` del `<video>` y degrada al
+ * player nativo con un mensaje visible: nunca se queda en negro sin explicar.
  */
 (function (global) {
   'use strict';
@@ -28,6 +36,12 @@
   var START_SEGMENTS = 2;      // arrancamos con 2 segmentos de colchón (§9.1 del plan)
   var MP4_MIME = 'video/mp4; codecs="avc1.4d401f,mp4a.40.2"';
   var TS_MIME  = 'video/mp2t; codecs="avc1.4d401f,mp4a.40.2"';
+
+  // Fin del contenido ya bufferizado (0 si aún no hay nada).
+  function bufferedEnd(sb) {
+    try { return sb.buffered.length ? sb.buffered.end(sb.buffered.length - 1) : 0; }
+    catch (e) { return 0; }
+  }
 
   function hasMSE() {
     return typeof global.MediaSource !== 'undefined' &&
@@ -164,11 +178,14 @@
 
         if (pl.init && !self.initDone) {
           self.initDone = true;
-          self.queue.push(pl.init);
+          self.queue.push({ url: pl.init, disc: false });
         }
         for (var i = 0; i < pl.segments.length; i++) {
-          var u = pl.segments[i].uri;
-          if (!self.seen[u]) { self.seen[u] = true; self.queue.push(u); }
+          var seg = pl.segments[i];
+          if (!self.seen[seg.uri]) {
+            self.seen[seg.uri] = true;
+            self.queue.push({ url: seg.uri, disc: !!seg.disc });
+          }
         }
         self.ended = pl.ended;
         self._pump();
@@ -196,8 +213,19 @@
       return;
     }
 
-    var url = this.queue.shift();
+    var item = this.queue.shift();
+    var url = item.url;
     this.appending = true;
+
+    // Cada escena viene de un ffmpeg distinto y reinicia sus timestamps: sin
+    // resetear el parser, Chrome aborta con
+    // "Parsed buffers not in DTS sequence" en la frontera de escena.
+    // abort() es justo eso: reset del estado del parser + nuevo grupo de frames.
+    if (item.disc && this.sb && !this.sb.updating) {
+      try { this.sb.abort(); } catch (e) { /* noop */ }
+      try { this.sb.timestampOffset = bufferedEnd(this.sb); } catch (e) { /* noop */ }
+    }
+
     fetch(url, { cache: 'no-store' })
       .then(function (r) {
         if (!r.ok) throw new Error('segmento HTTP ' + r.status);
