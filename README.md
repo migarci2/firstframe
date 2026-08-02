@@ -111,7 +111,7 @@ bigger than that, so the manifest is always the object *body*, never `Metadata=`
 
 [`pipeline/manifest.py#L131-L135`](pipeline/manifest.py#L131-L135) ·
 [`pipeline/manifest.py#L387-L429`](pipeline/manifest.py#L387-L429) ·
-[`server/jobs.py#L459-L492`](server/jobs.py#L459-L492) ·
+[`server/jobs.py#L481-L514`](server/jobs.py#L481-L514) ·
 [`server/b2.py#L204-L212`](server/b2.py#L204-L212)
 
 Approve does three things. It embeds the Genblaze manifest inside the MP4, it uploads the
@@ -278,7 +278,7 @@ rules are already written.
 
 [`server/b2.py#L43-L130`](server/b2.py#L43-L130) ·
 [`server/events.py#L225-L299`](server/events.py#L225-L299) ·
-[`server/jobs.py#L622-L656`](server/jobs.py#L622-L656)
+[`server/jobs.py#L644-L678`](server/jobs.py#L644-L678)
 
 Worth saying because it changed the design. The first poller listed four prefixes every
 2 s: 120 Class C calls a minute. We ate the account's daily cap in one afternoon of
@@ -307,7 +307,7 @@ asserts under a simulated cap ([`server/b2.py#L443-L468`](server/b2.py#L443-L468
 
 ### AgentLoop + ThresholdEvaluator with a real vision judge
 
-[`pipeline/scenes.py#L285-L319`](pipeline/scenes.py#L285-L319) ·
+[`pipeline/scenes.py#L537-L571`](pipeline/scenes.py#L537-L571) ·
 [`pipeline/judge.py#L221-L271`](pipeline/judge.py#L221-L271) ·
 [`pipeline/judge.py#L128-L152`](pipeline/judge.py#L128-L152)
 
@@ -315,7 +315,7 @@ The scene is wrapped in an `AgentLoop` whose `ThresholdEvaluator` has a `score_f
 calls `meta/llama-3.2-90b-vision-instruct` on NVIDIA NIM with the actual keyframe and the
 brief, and returns 0..1. The SDK's only `AgentLoop` example uses mocks; this one looks at
 pixels. On a fail, the judge's stated reason is injected into the next iteration's keyframe
-prompt through `feedback_fn` ([`pipeline/scenes.py#L187-L195`](pipeline/scenes.py#L187-L195)),
+prompt through `feedback_fn` ([`pipeline/scenes.py#L422-L438`](pipeline/scenes.py#L422-L438)),
 and `AgentLoop` chains the iterations by `parent_run_id`.
 
 Two things about that judge are verified facts, not preferences
@@ -332,19 +332,19 @@ neutral score flagged `degraded=True`, and the pipeline never dies because of it
 
 ### A real fan-in: `input_from=[1, 2]` into `FFmpegCompositor`
 
-[`pipeline/scenes.py#L272-L281`](pipeline/scenes.py#L272-L281)
+[`pipeline/scenes.py#L524-L533`](pipeline/scenes.py#L524-L533)
 
 Step 3 takes the voiceover (step 1) and the clip (step 2) in the same
 `step.inputs`. That is a DAG, not a chain — and it is not decorative: `FFmpegCompositor`
 refuses to run unless it receives both an `audio/` and a `video/` asset, and `input_from`
 is the only way to hand it both. The self-check asserts the compositor's inputs were
-exactly `{audio, video}` ([`pipeline/scenes.py#L402-L404`](pipeline/scenes.py#L402-L404)).
+exactly `{audio, video}` ([`pipeline/scenes.py#L655-L656`](pipeline/scenes.py#L655-L656)).
 The composition step is also free — it is local ffmpeg.
 
 ### `fallback_models` with a failover you can trigger on camera
 
-[`pipeline/scenes.py#L243`](pipeline/scenes.py#L243) ·
-[`pipeline/scenes.py#L258-L270`](pipeline/scenes.py#L258-L270) ·
+[`pipeline/scenes.py#L494`](pipeline/scenes.py#L494) ·
+[`pipeline/scenes.py#L509-L523`](pipeline/scenes.py#L509-L523) ·
 [`pipeline/providers.py#L185-L253`](pipeline/providers.py#L185-L253)
 
 Keyframe: `flux.1-schnell` → `stable-diffusion-3-5-large-turbo`.
@@ -361,7 +361,7 @@ One detail worth the extra ten lines: `ChaosWrapper` kills only *guarded* models
 pipeline with nowhere to go and there would be no failover to show. What the demo claims is
 precisely what happens: the primary is down, the backup is not. The self-check asserts the
 step ended on `seedance-2-0` with `fallback_from == "pixverse-v5.6"`
-([`pipeline/scenes.py#L420-L428`](pipeline/scenes.py#L420-L428)).
+([`pipeline/scenes.py#L672-L681`](pipeline/scenes.py#L672-L681)).
 
 `ChaosWrapper` also delegates through `inner.invoke()` rather than `inner.generate()`, so
 the wrapped provider keeps its submit/poll/fetch cycle and retry policy, and it re-raises
@@ -370,8 +370,8 @@ provider still triggers failover through the wrapper.
 
 ### Lineage by `parent_run_id`, at two levels
 
-[`pipeline/scenes.py#L230-L232`](pipeline/scenes.py#L230-L232) ·
-[`pipeline/runner.py#L366`](pipeline/runner.py#L366) ·
+[`pipeline/scenes.py#L472-L474`](pipeline/scenes.py#L472-L474) ·
+[`pipeline/runner.py#L504`](pipeline/runner.py#L504) ·
 [`pipeline/manifest.py#L246-L252`](pipeline/manifest.py#L246-L252)
 
 Scene N hangs off scene N-1 via `Pipeline.from_result(parent)`, and inside a scene the
@@ -379,17 +379,17 @@ Scene N hangs off scene N-1 via `Pipeline.from_result(parent)`, and inside a sce
 when the loop refines, we keep the scene-to-scene edge separately as
 `chain_parent_run_id` so the aggregate manifest can publish the whole tree instead of one
 of its two axes. Rejecting a take also creates an edge: the refined run records
-`rejected_run_id` ([`pipeline/runner.py#L524-L536`](pipeline/runner.py#L524-L536)), so the
+`rejected_run_id` ([`pipeline/runner.py#L663-L674`](pipeline/runner.py#L663-L674)), so the
 manifest carries the bad-take → good-take chain.
 
 Verified by assertion, not by hope:
-[`pipeline/runner.py#L720-L724`](pipeline/runner.py#L720-L724).
+[`pipeline/runner.py#L974-L978`](pipeline/runner.py#L974-L978).
 
 ### Manifest embedded in the MP4, and verification
 
 [`pipeline/manifest.py#L350-L368`](pipeline/manifest.py#L350-L368) (embed) ·
 [`pipeline/manifest.py#L489-L608`](pipeline/manifest.py#L489-L608) (verify) ·
-[`server/jobs.py#L553-L603`](server/jobs.py#L553-L603) (the `/api/verify` path)
+[`server/jobs.py#L575-L625`](server/jobs.py#L575-L625) (the `/api/verify` path)
 
 On approve, `SmartEmbedder`/`Mp4Handler` write the manifest into the MP4's uuid box, and we
 immediately extract it again and compare canonical hashes — if it cannot be read back we do
@@ -409,7 +409,7 @@ identical checks in-process with the SDK, reporting which of the two ran in `met
 ### `ObjectStorageSink`, used correctly
 
 [`pipeline/manifest.py#L122-L128`](pipeline/manifest.py#L122-L128) ·
-[`pipeline/runner.py#L352-L364`](pipeline/runner.py#L352-L364)
+[`pipeline/runner.py#L490-L502`](pipeline/runner.py#L490-L502)
 
 A new sink per scene run, closed in a `finally` — it is single-use. The non-obvious part is
 `_owns_sink=False`: `AgentLoop` passes the *same* `run_kwargs` to every iteration, so with
@@ -418,7 +418,7 @@ dead pool.
 
 Two more sharp edges we hit and documented in place: the sink only reads `file://` paths
 under `tempfile.gettempdir()` (`ALLOWED_FILE_ROOTS`) and never plumbs `output_dir`, so all
-media work happens under temp ([`pipeline/runner.py#L214-L230`](pipeline/runner.py#L214-L230));
+media work happens under temp ([`pipeline/runner.py#L323-L339`](pipeline/runner.py#L323-L339));
 and the sink **rewrites `asset.url`** to the private B2 object during the run, so anything
 that re-reads an asset afterwards — the judge, the runner, `verify` — has to sign the
 request ([`pipeline/manifest.py#L443-L482`](pipeline/manifest.py#L443-L482)).
@@ -434,15 +434,21 @@ manifest with its source, its sha256, the run ids of every scene it came from, a
 of the aggregate manifest. And because that ingest run carries a sink with `manifest_lock`,
 the manifest lands in B2 already WORM.
 
-### Our own provider: `PollinationsProvider`
+### Two providers of our own, and a third generation mode built out of them
 
-[`pipeline/free_provider.py`](pipeline/free_provider.py) ·
-end-to-end probe: [`scripts/probe_free_provider.py`](scripts/probe_free_provider.py)
+`GEN_MODE=mock|free|real` ([`pipeline/scenes.py#L166-L192`](pipeline/scenes.py#L166-L192)).
+`mock` is ffmpeg `testsrc2`, instant and offline. `real` is the paid connectors.
+**`free` is real generation with no card and no API key at all** — and it exists because we
+wrote the two providers it needs
+([`pipeline/scenes.py#L332-L350`](pipeline/scenes.py#L332-L350)).
+
+**`PollinationsProvider`** — [`pipeline/free_provider.py`](pipeline/free_provider.py),
+end-to-end probe in [`scripts/probe_free_provider.py`](scripts/probe_free_provider.py).
 
 We had no credentials for any image-generation provider — NIM's free tier gives chat and
 vision but its `genai` image endpoint hangs. Rather than ship a demo made entirely of
-`ffmpeg testsrc2`, we wrote a real `SyncProvider` against Pollinations.ai, the one image
-API that answers 200 with **zero credentials**: no key, no signup, no card. It plugs into
+`testsrc2`, we wrote a real `SyncProvider` against Pollinations.ai, the one image API that
+answers 200 with **zero credentials**: no key, no signup, no card. It plugs into
 `Pipeline.step()`, its assets go up through `ObjectStorageSink`, and its output passes
 `Manifest.verify()` like any official connector.
 
@@ -454,10 +460,47 @@ rather than copied from the request (the anonymous tier silently caps resolution
 1024x576, so the `Asset` would otherwise lie); and an unknown model mapped deliberately to
 `MODEL_ERROR`, because that is the only code `fallback_models` reacts to.
 
-Measured honestly in the docstring: the anonymous tier takes **44.9 s min / 46.9 s mean /
-52.8 s max** per image, and it is rate limiting rather than generation time — the same
-latency at 512x288 as at 1024x576. That is why it is not the default path for the scene
-pipeline.
+Measured honestly in its docstring: the anonymous tier takes **44.9 s min / 46.9 s mean /
+52.8 s max** per image, and it is rate limiting rather than generation time — identical
+latency at 512x288 and at 1024x576. So the scene pipeline wraps it in `CachedPollinations`
+([`pipeline/scenes.py#L254-L320`](pipeline/scenes.py#L254-L320)) with a persistent
+keyframe corpus keyed on prompt + seed + model + size
+([`pipeline/scenes.py#L197-L252`](pipeline/scenes.py#L197-L252)) and a seed derived from
+the prompt itself ([`pipeline/scenes.py#L322-L329`](pipeline/scenes.py#L322-L329)) — same
+brief, same image, instantly; refined prompt, new image, which is exactly what refining
+should mean. The SDK's own `StepCache` is not enough here because `runner.run_job`
+namespaces it per job, so two jobs with the same brief would each pay the 45 s again.
+
+That wrapper also had to work around a real SDK behaviour: `Pipeline` **pulls `seed` out of
+`params`** and promotes it to `Step.seed`, so a provider reading `step.params["seed"]`
+would never see it and every re-render would return a different image. `CachedPollinations`
+re-injects it into `params` for the duration of the call and restores it on the way out,
+because leaving it mutated would change the key `StepCache.put` computes.
+
+**`KenBurnsProvider`** — [`pipeline/kenburns.py`](pipeline/kenburns.py)
+
+`free` mode has real images but no free video model, so the image→video step needed
+filling — the same slot `pixverse`/`seedance` occupies in `real` mode. A still image is not
+a video: a slideshow reads on camera as exactly what it is. So the second provider turns a
+keyframe into an actual shot with ffmpeg `zoompan`, and three things in it are the
+difference between "looks generated" and "looks shot":
+
+- **Supersample before `zoompan`.** Applied directly to the 1024x576 the anonymous tier
+  returns, `zoompan` judders and goes soft. Pre-scaling to 3× the canonical size
+  (3840x2160, lanczos) makes the motion subpixel and the 1280x720 output sharp. ~1 s per
+  4 s clip — free next to the 45 s of the image.
+- **Only `on`, never `zoom`.** The `z='min(zoom+0.0015,1.5)'` expression everyone copies is
+  cumulative — it depends on the previous frame, so the move changes if `d` changes and it
+  is not reproducible. Every expression here is written against `on`, the output frame
+  index, so the shot is identical on every re-render.
+- **Easing and per-scene direction.** Linear interpolation starts and stops abruptly and
+  gives the automation away; a smoothstep on the progress does not. And `move_for(n)`
+  rotates push-in / pan / pull-out / rise by scene index, so a 3-scene spot never repeats a
+  move.
+
+It emits a silent clip at the canonical parameters, so the voiceover is mixed in at step 3
+by `FFmpegCompositor` exactly like in the mock and real paths. Self-check:
+`.venv/bin/python -m pipeline.kenburns`, no network needed.
 
 ### `PassthroughProvider`, because `Pipeline.input(file)` does not exist
 
@@ -474,17 +517,17 @@ Everything here is written into the source as a comment at the line it matters:
 
 - `Pipeline(..., preflight=False)` **always** — the default is `preflight=True` and it runs
   `validate_model()`, which is inverted (issue #248). A check that lies is worse than no
-  check ([`pipeline/scenes.py#L222-L226`](pipeline/scenes.py#L222-L226)).
+  check ([`pipeline/scenes.py#L464-L467`](pipeline/scenes.py#L464-L467)).
 - `PromptTemplate(template=...)`, never positional — and templates must be `render()`ed
   before reaching `step()` outside `batch_run()`
-  ([`pipeline/scenes.py#L62-L83`](pipeline/scenes.py#L62-L83)).
+  ([`pipeline/scenes.py#L95-L116`](pipeline/scenes.py#L95-L116)).
 - Mocks from `genblaze_core`, never `genblaze_core.testing` (it imports pytest at module
   level, which is not a runtime dependency).
 - No `@dataclass` on a `SyncProvider` subclass. It silently skips `BaseProvider.__init__`
   and blows up ~1300 lines away with `AttributeError: '_retry_policy_override'`.
 - `.cache(StepCache(dir))` is fluent; `run(cache=...)` is a bare `TypeError`.
 - No `Asset.text` — transcripts and JSON go in `metadata["text"]`
-  ([`pipeline/scenes.py#L248-L255`](pipeline/scenes.py#L248-L255)).
+  ([`pipeline/scenes.py#L499-L507`](pipeline/scenes.py#L499-L507)).
 - `genblaze-s3`'s preflight does a `HeadBucket` (Class B). With the transaction cap
   reached, that 403 is classified as a *permanent* error and poisons the backend for the
   whole process lifetime, killing runs before they generate anything — even though uploads
@@ -528,26 +571,32 @@ receiver is written and tested (`server/events.py` `demo()`), and the poller emi
 internal events, so `EVENTS_MODE=poll` is the effective mode. The webhook is credibility,
 not a dependency.
 
-**No media-generation credentials, so `DEMO_MODE=mock` is the default path.** The scene
+**We have no paid media-generation credentials, so `mock` is the default mode.** The scene
 pipeline runs the SDK's real `MockProvider`/`MockVideoProvider`/`MockAudioProvider` with an
 `assets=` callable that synthesises genuine local media with ffmpeg, because their default
 assets are `https://mock.test/...` URLs that ffmpeg cannot open and `FFmpegCompositor`
 would fail on. Every step, sink, manifest, lock and verification in the pipeline is the
-real thing; only the pixels are synthetic. Setting `DEMO_MODE=real` with
+real thing; only the pixels are synthetic. `GEN_MODE=real` with
 `NVIDIA_API_KEY` / `OPENAI_API_KEY` / `GMI_API_KEY` swaps each provider independently, and
 a partial environment produces a `mixed` run instead of a crash
-([`pipeline/scenes.py#L124-L184`](pipeline/scenes.py#L124-L184)).
-`PollinationsProvider` is real generation with no credentials at all, verified end-to-end
-through Genblaze into B2 by `scripts/probe_free_provider.py`, but at ~45 s per image on the
-anonymous tier it is a probe, not the default scene path.
+([`pipeline/scenes.py#L353-L419`](pipeline/scenes.py#L353-L419)).
 
-**The headline numbers come from mock-provider runs with the judge off.** 5.4 s / 22.8 s
+**`GEN_MODE=free` is real generation with no credentials, and it is slow.** Pollinations'
+anonymous tier serialises to one request per IP at ~45 s each, so a 3-scene spot is about
+two and a half minutes of wall clock on a cold corpus — which is fine for the product
+thesis (the first frame still arrives while the rest generates) but bad for a demo you have
+to run twice. The keyframe corpus makes a re-run of the same brief instant, and
+`--pregenerate` fills it ahead of time. The clip step in this mode is our Ken Burns
+provider, not a video model: there is no free video generation, and the module says so in
+its first paragraph rather than implying otherwise.
+
+**The headline numbers come from mock-mode runs with the judge off.** 5.4 s / 22.8 s
 was measured with `DEMO_MODE=mock` and `JUDGE_THRESHOLD=0`. The reason for the second one is
 concrete: NIM's free-tier vision judge takes ~30 s per scene and, when it times out, it
 degrades to 0.50 — below threshold — which triggers another iteration and another 30 s. With
 the judge on, the first frame goes to ~70 s. So the judge is real and it is wired into a
 real `AgentLoop`, and for a live demo it is switched off from the environment rather than
-removed from the code ([`server/jobs.py#L255-L264`](server/jobs.py#L255-L264)).
+removed from the code ([`server/jobs.py#L259-L268`](server/jobs.py#L259-L268)).
 
 **The live URL is not deployed yet.** `Dockerfile` and `fly.toml` are written and the
 deployment commands are in the header of `fly.toml`. Run it locally with the commands
@@ -580,10 +629,26 @@ Needs `ffmpeg` on `PATH`.
 .venv/bin/uvicorn server.app:app --port 8000
 ```
 
-`DEMO_MODE=mock` and no `B2_*` variables means: the real Genblaze pipeline, real
-`AgentLoop`, real fan-in, real manifests, real HLS assembly, everything served off local
-disk. Paste a brief, press **New spot**, and watch the first-frame clock.
+`GEN_MODE=mock` (the default) and no `B2_*` variables means: the real Genblaze pipeline,
+real `AgentLoop`, real fan-in, real manifests, real HLS assembly, everything served off
+local disk. Paste a brief, press **New spot**, and watch the first-frame clock.
 Press `k` for the chaos panel and kill `gmicloud` to see `fallback_models` fire.
+
+### Real image generation, still with no credentials
+
+```bash
+# fill the keyframe corpus first — ~45 s per image on the anonymous tier
+.venv/bin/python -m pipeline.runner --pregenerate
+
+DEMO_MODE=free .venv/bin/uvicorn server.app:app --port 8000
+```
+
+Keyframes come from Pollinations.ai (no key, no card) and the clip step is our Ken Burns
+provider. `DEMO_MODE` and not `GEN_MODE` for the server, because `server/jobs.py` forces
+`mock=True` whenever `DEMO_MODE` is `mock`
+([`server/jobs.py#L259-L260`](server/jobs.py#L259-L260)) — deploying in free mode is that
+one variable and nothing else. Once the corpus is warm, re-running the same brief is
+instant.
 
 ### Against your own B2 account
 
@@ -606,10 +671,12 @@ set -a && . ./.env && set +a
 ### The pipeline on its own
 
 ```bash
-.venv/bin/python -m pipeline.runner --selftest                 # demo() of all 6 modules
+.venv/bin/python -m pipeline.runner --selftest                 # every module's demo()
 .venv/bin/python -m pipeline.runner --job demo1 --mock --no-judge
 .venv/bin/python -m pipeline.runner --job demo1 --mock --chaos gmicloud   # failover in the logs
 .venv/bin/python -m pipeline.runner --job demo1 --mock --approve --verify
+.venv/bin/python -m pipeline.runner --job demo1 --free          # real images, no credentials
+.venv/bin/python -m pipeline.runner --pregenerate               # warm the keyframe corpus
 ```
 
 ### Every module self-checks
@@ -623,22 +690,35 @@ set -a && . ./.env && set +a
 set -a && . ./.env && set +a
 .venv/bin/python -m server.b2          # put/get/range/presign/lock + B2 refuses the delete
 .venv/bin/python pipeline/free_provider.py   # generates a real image, no credentials needed
+.venv/bin/python -m pipeline.kenburns  # still image -> moving shot, no network needed
 ```
 
 ---
 
 ## Providers and models
 
-| Role | Provider | Model | Fallback | Status |
+Three generation modes, selected with `GEN_MODE=mock|free|real`.
+
+| Step | Mode | Provider | Model | Fallback |
 |---|---|---|---|---|
-| Keyframe | NVIDIA NIM | `black-forest-labs/flux.1-schnell` | `stabilityai/stable-diffusion-3-5-large-turbo` | declared; NIM's free tier does not serve image generation (verified) |
-| Keyframe, credential-free | **Pollinations.ai** (our own `SyncProvider`) | `flux` nominal, `sana` on the anonymous tier | `sana`, `turbo` | **real generation, verified end-to-end into B2** |
-| Voiceover | OpenAI | `tts-1` | — | declared; never GMI Cloud audio, it is broken (issue #251) |
-| Clip | GMI Cloud | `pixverse-v5.6` | `seedance-2-0` | declared; this is the failover shown on camera |
-| Vision judge | NVIDIA NIM | `meta/llama-3.2-90b-vision-instruct` | — | **free and verified working**; `nemotron-nano-12b-v2-vl` fails and is not used |
-| Scene planning | NVIDIA NIM | `meta/llama-3.3-70b-instruct` | fixed template | optional; the default path is the template, so it never depends on an API |
-| Composition | local ffmpeg | `FFmpegCompositor` | — | free, always on |
-| Development | Genblaze | `MockProvider` / `MockVideoProvider` / `MockAudioProvider` | — | default path, $0 |
+| Keyframe | `real` | NVIDIA NIM | `black-forest-labs/flux.1-schnell` | `stabilityai/stable-diffusion-3-5-large-turbo` |
+| Keyframe | **`free`** | **Pollinations.ai — our own `SyncProvider`** | `flux` nominal (`sana` is what the anonymous tier actually serves) | `turbo` |
+| Keyframe | `mock` | Genblaze | `MockProvider` + ffmpeg | — |
+| Voiceover | `real` | OpenAI | `tts-1` | — |
+| Voiceover | `free`/`mock` | Genblaze | `MockAudioProvider` + ffmpeg | — |
+| Clip | `real` | GMI Cloud | `pixverse-v5.6` | `seedance-2-0` |
+| Clip | **`free`** | **our own `KenBurnsProvider`** | `kenburns-2.5d` | `kenburns-static` |
+| Clip | `mock` | Genblaze | `MockVideoProvider` + ffmpeg | — |
+| Composite | all | local ffmpeg | `FFmpegCompositor`, fan-in of steps 1 and 2 | — |
+| Vision judge | all | NVIDIA NIM | `meta/llama-3.2-90b-vision-instruct` | — |
+| Scene planning | optional | NVIDIA NIM | `meta/llama-3.3-70b-instruct` | fixed template |
+
+Notes that matter: NIM's free tier serves chat and vision but **not** image generation
+(verified — the `genai` endpoint hangs), which is why `free` mode exists at all. The vision
+judge is free and verified working; `nemotron-nano-12b-v2-vl` gives wrong answers and is
+not used. GMI Cloud is never used for audio — that modality is broken upstream (issue
+#251). There is no free video-generation model anywhere, which is why the `free` clip step
+is Ken Burns motion over a real generated still rather than a video model.
 
 Storage: Backblaze B2, bucket `genblaze-review-migarci2`, region `eu-central-003`.
 SDK: `genblaze` 0.4.5, `genblaze-core` 0.3.8, `genblaze-s3` 0.3.6.
@@ -649,7 +729,8 @@ Total cloud spend on generation for this project: **$0.00**.
 ## Repo map
 
 ```
-pipeline/     Genblaze: providers, scene DAG, vision judge, runner, manifests, chaos switch
+pipeline/     Genblaze: scene DAG, vision judge, runner, manifests, chaos switch,
+              and our two providers — free_provider.py (Pollinations) and kenburns.py
 server/       FastAPI: jobs, B2 client, HLS assembler, streamer, event bus, sqlite
 infra/        b2_setup.py (lifecycle + event rules), make_keys.py (restricted keys)
 web/          review room — vanilla HTML/JS/CSS, no build step

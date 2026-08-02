@@ -131,10 +131,23 @@ system temp dir and never plumbs `output_dir`, and it **rewrites `asset.url`** t
 private B2 object during the run, so everything that re-reads an asset afterwards has to
 sign the request.
 
-**No media-generation credentials.** NIM's free tier gives chat and vision but its image
-endpoint hangs. Rather than ship a demo made entirely of `ffmpeg testsrc2`, we wrote a
-`SyncProvider` against Pollinations.ai — the one image API that answers 200 with zero
-credentials — and verified it end to end through Genblaze into B2 with a passing manifest.
+**No media-generation credentials, so we wrote two providers.** NIM's free tier gives chat
+and vision but its image endpoint hangs. Rather than ship a demo made entirely of
+`ffmpeg testsrc2`, we wrote `PollinationsProvider` — a real `SyncProvider` against the one
+image API that answers 200 with zero credentials — and `KenBurnsProvider` to fill the
+image→video slot, because there is no free video model anywhere. Together they are
+`GEN_MODE=free`: real generated pixels, no key, no card, verified end to end through
+Genblaze into B2 with a passing manifest.
+
+The problem free mode creates is latency: Pollinations' anonymous tier serialises to one
+request per IP at ~45 s each. So the scene pipeline wraps the provider in a persistent
+keyframe corpus keyed on prompt + seed + model + size, with the seed derived from the
+prompt itself — same brief, same image, instantly; refined prompt, new image, which is what
+refining should mean. The SDK's own `StepCache` could not do this: `run_job` namespaces it
+per job, so two jobs with the same brief would each pay the 45 s again. That wrapper also
+had to work around a real SDK behaviour — `Pipeline` **pulls `seed` out of `params`** and
+promotes it to `Step.seed`, so a provider reading `step.params["seed"]` never sees it and
+every re-render returns a different image.
 
 ## Accomplishments
 
@@ -193,22 +206,37 @@ have been caught by that one job.
 - Per-scene approval instead of per-job, so a spot can go out while one scene is still
   being refined.
 - Cost per asset and per team on top of the transaction counter we already ship.
-- Publish `PollinationsProvider` as a standalone Genblaze connector on PyPI.
+- Publish `PollinationsProvider` and `KenBurnsProvider` as standalone Genblaze connectors
+  on PyPI.
 
 ---
 
 ## Providers and models used
 
-| Role | Provider | Model | Fallback | Status |
+Three generation modes, selected with `GEN_MODE=mock|free|real` (`DEMO_MODE` is read as a
+fallback and is the variable the server honours).
+
+| Step | Mode | Provider | Model | Fallback |
 |---|---|---|---|---|
-| Keyframe | NVIDIA NIM | `black-forest-labs/flux.1-schnell` | `stabilityai/stable-diffusion-3-5-large-turbo` | declared; NIM's free tier does not serve image generation (verified) |
-| Keyframe, credential-free | **Pollinations.ai** — our own `SyncProvider` | `flux` nominal, `sana` on the anonymous tier | `sana`, `turbo` | **real generation, verified end to end into B2** |
-| Voiceover | OpenAI | `tts-1` | — | declared. Never GMI Cloud audio: the modality is broken, issue #251 |
-| Clip | GMI Cloud | `pixverse-v5.6` | `seedance-2-0` | declared; this is the failover shown on camera |
-| Vision judge | NVIDIA NIM | `meta/llama-3.2-90b-vision-instruct` | — | **free and verified working**. `nemotron-nano-12b-v2-vl` gives wrong answers and is not used |
-| Scene planning | NVIDIA NIM | `meta/llama-3.3-70b-instruct` | fixed template | optional; the default path is the template so it never depends on an API |
-| Composition | local ffmpeg | `FFmpegCompositor` | — | free, always on |
-| Development | Genblaze | `MockProvider` / `MockVideoProvider` / `MockAudioProvider` | — | default path, $0 |
+| Keyframe | `real` | NVIDIA NIM | `black-forest-labs/flux.1-schnell` | `stabilityai/stable-diffusion-3-5-large-turbo` |
+| Keyframe | **`free`** | **Pollinations.ai — our own `SyncProvider`** | `flux` nominal (`sana` is what the anonymous tier actually serves) | `turbo` |
+| Keyframe | `mock` | Genblaze | `MockProvider` + ffmpeg | — |
+| Voiceover | `real` | OpenAI | `tts-1` | — |
+| Voiceover | `free` / `mock` | Genblaze | `MockAudioProvider` + ffmpeg | — |
+| Clip | `real` | GMI Cloud | `pixverse-v5.6` | `seedance-2-0` |
+| Clip | **`free`** | **our own `KenBurnsProvider`** | `kenburns-2.5d` | `kenburns-static` |
+| Clip | `mock` | Genblaze | `MockVideoProvider` + ffmpeg | — |
+| Composite | all | local ffmpeg | `FFmpegCompositor`, fan-in of steps 1 and 2 | — |
+| Vision judge | all | NVIDIA NIM | `meta/llama-3.2-90b-vision-instruct` | — |
+| Scene planning | optional | NVIDIA NIM | `meta/llama-3.3-70b-instruct` | fixed template |
+
+Notes that matter. NIM's free tier serves chat and vision but **not** image generation
+(verified — the `genai` endpoint hangs), which is why `free` mode exists at all. The vision
+judge is free and verified working; `nemotron-nano-12b-v2-vl` gives wrong answers and is
+not used. GMI Cloud is never used for audio: the modality is broken upstream (issue #251).
+There is no free video-generation model anywhere, which is why the `free` clip step is Ken
+Burns motion over a real generated still rather than a video model. Total cloud spend on
+generation for this project: **$0.00**.
 
 Storage: Backblaze B2, bucket `genblaze-review-migarci2`, region `eu-central-003`,
 endpoint `https://s3.eu-central-003.backblazeb2.com`.
@@ -333,12 +361,23 @@ pipeline run — a real Genblaze manifest carrying its source, sha256, the run i
 scene it came from, and the key of the aggregate manifest. That ingest run carries the sink
 with `manifest_lock`, so its manifest lands in B2 already WORM.
 
-**Our own provider.** `PollinationsProvider` is a real `SyncProvider` doing real image
-generation with zero credentials: process-wide serialization because the anonymous tier
-queues one request per IP, backoff honouring `Retry-After`, magic-byte sniffing so a 200
-that isn't an image never reaches B2, real sha256 and real dimensions read back off the
-file rather than copied from the request, and an unknown model deliberately mapped to
-`MODEL_ERROR` because that is the only code `fallback_models` reacts to.
+**Two providers of our own, and a whole generation mode built out of them.**
+`PollinationsProvider` does real image generation with zero credentials, and it deals with
+real problems: process-wide serialization because the anonymous tier queues one request per
+IP, backoff honouring `Retry-After`, magic-byte sniffing so a 200 that isn't an image never
+reaches B2, real sha256 and real dimensions read back off the file rather than copied from
+the request (the anonymous tier silently caps resolution, so the `Asset` would otherwise
+lie), and an unknown model deliberately mapped to `MODEL_ERROR` because that is the only
+code `fallback_models` reacts to.
+
+`KenBurnsProvider` fills the image→video slot in free mode — the one `pixverse`/`seedance`
+occupies in real mode — because a still image is not a video and a slideshow reads on
+camera as exactly what it is. Three details make it look shot rather than generated:
+supersample to 3× canonical before `zoompan` (applied directly to the 1024x576 the free
+tier returns it judders and goes soft); write every expression against `on`, the output
+frame index, never the cumulative `zoom` variable everyone copies, so the move is
+reproducible; and ease the progress with a smoothstep, with the direction rotating by scene
+index so a 3-scene spot never repeats a move.
 
 **`PassthroughProvider`,** because `Pipeline.input(file)` does not exist — step 0 must be a
 generating provider. Ten lines, and 8 of 10 official sample apps hit this.
@@ -360,13 +399,19 @@ Stated here because a judge with repo access should read it from us.
 - **Event Notifications are gated at the account level** (`400 ... not enabled`). The five
   rules are declared, the signed receiver is written and tested, and the poller emits the
   same internal events, so `EVENTS_MODE=poll` is the effective mode.
-- **`DEMO_MODE=mock` is the default path,** because we have no media-generation
+- **`mock` is the default mode,** because we have no paid media-generation
   credentials. The mocks are the SDK's real mock providers with an `assets=` callable that
   synthesises genuine local media with ffmpeg. Every step, sink, manifest, lock and
-  verification is the real thing; only the pixels are synthetic. `DEMO_MODE=real` swaps each
+  verification is the real thing; only the pixels are synthetic. `GEN_MODE=real` swaps each
   provider independently, and a partial environment yields a `mixed` run rather than a
   crash.
-- **The headline numbers come from mock-provider runs with the judge off.** NIM's free-tier
+- **`GEN_MODE=free` is real generation with no credentials, and it is slow.** ~45 s per
+  keyframe on Pollinations' anonymous tier, so a 3-scene spot is about two and a half
+  minutes cold. The keyframe corpus makes a repeat instant and `--pregenerate` warms it
+  ahead of time. The clip step in this mode is our Ken Burns provider, not a video model:
+  there is no free video generation, and the module says so in its first paragraph rather
+  than implying otherwise.
+- **The headline numbers come from mock-mode runs with the judge off.** NIM's free-tier
   vision judge takes ~30 s per scene and, on timeout, degrades to 0.50 — below threshold —
   triggering another iteration and another 30 s, pushing first frame to ~70 s. The judge is
   real and wired into a real `AgentLoop`; for a live demo it is switched off from the
@@ -390,7 +435,7 @@ Stated here because a judge with repo access should read it from us.
 ## Submission checklist
 
 - [ ] Live URL with no login wall, preloaded data, and a "New spot" button that costs the
-      judges nothing (`DEMO_MODE=mock`). Tested from incognito.
+      judges nothing (`DEMO_MODE=mock`, or `free` with a warm keyframe corpus). Tested from incognito.
 - [ ] Video ≤3 min, unlisted, with the on-screen numbers and the failover on camera.
 - [ ] Repo public, or `b2genblaze` invited if private.
 - [x] README with explicit "How we use B2" and "How we use Genblaze" sections, feature by
