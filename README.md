@@ -203,8 +203,12 @@ script that runs with the master key and then steps aside
 This is the piece the product stands on. Each finished scene mp4 goes through ffmpeg with
 identical encode parameters and is segmented into ~2 s `.ts` chunks. Segments are uploaded
 to `incoming/{job}/seg/` **as ffmpeg closes them**, not at the end, and
-`incoming/{job}/index.m3u8` is regenerated and re-uploaded after each one, carrying
+`incoming/{job}/index.m3u8` is regenerated after each one, carrying
 `#EXT-X-PLAYLIST-TYPE:EVENT` while the job lives and `#EXT-X-ENDLIST` when it closes.
+(The playlist a player sees is regenerated from the database on every request; the copy
+pushed to B2 is throttled to at most one upload every `B2_PLAYLIST_UPLOAD_EVERY_S` — 5 s by
+default — and always on close, because the durable artifact does not need a write per
+segment.)
 Because each scene is an independent encode whose PTS restarts at zero, the playlist emits
 `#EXT-X-DISCONTINUITY` at every scene boundary — without it the player stalls.
 

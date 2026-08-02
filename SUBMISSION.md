@@ -77,7 +77,9 @@ end of the job. That callback hands the file to `server/assembler.py`, which tra
 to canonical parameters, segments it, uploads each segment to `incoming/{job}/seg/` **as
 ffmpeg closes it**, and regenerates `incoming/{job}/index.m3u8` after each one with
 `#EXT-X-PLAYLIST-TYPE:EVENT`, plus `#EXT-X-DISCONTINUITY` at every scene boundary because
-each scene is an independent encode whose timestamps restart at zero.
+each scene is an independent encode whose timestamps restart at zero. (The playlist a
+player sees is rebuilt from the database on every request; the copy pushed to B2 is
+throttled to one upload every 5 s and always on close.)
 
 Everything else follows from that: the segment duration is the floor on "first frame", so
 it is 2 s and not 4; every scene must come out of the pipeline with byte-identical encode
@@ -229,7 +231,7 @@ manifest is always the object *body*, never `Metadata=`.
 
 **Incremental HLS served out of the bucket.** Each scene is segmented into ~2 s chunks
 uploaded to `incoming/{job}/seg/` as ffmpeg closes them, with
-`incoming/{job}/index.m3u8` regenerated and re-uploaded after every segment,
+`incoming/{job}/index.m3u8` regenerated after every segment,
 `#EXT-X-PLAYLIST-TYPE:EVENT` while the job lives, `#EXT-X-ENDLIST` when it closes, and
 `#EXT-X-DISCONTINUITY` at every scene boundary. This is the product. *Serve* is an explicit
 verb in the storage criterion and it is the part of B2 the field leaves untouched.
