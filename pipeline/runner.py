@@ -14,13 +14,22 @@ CLI:
     .venv/bin/python -m pipeline.runner --job demo1 --mock
     .venv/bin/python -m pipeline.runner --job demo1 --mock --chaos gmicloud
     .venv/bin/python -m pipeline.runner --job demo1 --mock --approve --verify
+
+    # generacion de imagen REAL (gratis, sin tarjeta) + Ken Burns: ~45 s/escena
+    GEN_MODE=free .venv/bin/python -m pipeline.runner --job real1 --scenes 3
+    .venv/bin/python -m pipeline.runner --free --job real1 --frames /tmp/real-scenes
+
+    # corpus de la demo: genera y cachea los briefs de ejemplo (una sola vez)
+    .venv/bin/python -m pipeline.runner --pregenerate
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -36,9 +45,11 @@ from pipeline import providers as P
 from pipeline.scenes import (
     CHAOS_KEY,
     DRAFT_WATERMARK,
+    KeyframeCorpus,
     Scene,
     build_scene_agent,
     composite_asset,
+    gen_mode,
     normalize_scene,
     resolve_providers,
     video_params,
@@ -51,32 +62,88 @@ DEFAULT_SECONDS = 4.0
 
 # Plantilla fija del plan de escenas. Es el camino por defecto: no depende de
 # ninguna API y produce siempre el mismo numero de escenas.
+#
+# Los planos estan elegidos con el generador REAL delante (PLAN §0): Pollinations
+# es bueno en planos generales, entornos, bodegones y macro, y MALO en primeros
+# planos de cara (caras de plastico que delatan la IA al instante). Por eso no
+# hay ni un beat con personas: donde el guion pedia "el producto en uso, manos
+# en cuadro" ahora hay un bodegon del producto en su contexto. En mock da igual
+# — pero en free es la diferencia entre un spot y una demo de IA cutre.
 _BEATS: list[tuple[str, str, str, str]] = [
     ("apertura",
-     "wide establishing shot of the product on a clean surface",
+     "wide establishing shot of the space where the product lives, product small "
+     "in frame on a clean surface, generous negative space, no people",
      "{brief_short}",
      "slow push-in towards the product"),
     ("detalle",
-     "extreme close-up of the product label and texture",
+     "macro shot of the product surface, material and texture, dramatic side "
+     "light, seamless backdrop",
      "Cada detalle cuenta.",
-     "slow orbit around the product, shallow depth of field"),
-    ("uso",
-     "the product in use, hands in frame, natural light",
-     "Hecho para el dia a dia.",
-     "handheld drift, subtle parallax"),
+     "slow drift across the surface, shallow depth of field"),
     ("contexto",
-     "the product in a lifestyle setting, soft morning light",
+     "still life of the product in a lifestyle setting, empty room, soft window "
+     "light, no people",
      "Encaja donde vivas.",
      "lateral dolly across the scene"),
+    ("materia",
+     "overhead flat lay of the raw materials behind the product, arranged on "
+     "stone, studio light",
+     "Hecho de lo esencial.",
+     "slow overhead rise"),
     ("beneficio",
-     "macro shot of the result the product delivers",
+     "abstract macro of the result the product delivers, droplets and light "
+     "refraction, no people",
      "Resultados que se ven.",
-     "slow rack focus onto the result"),
+     "slow rack focus onto the highlight"),
     ("cierre",
-     "hero shot of the product centred against a plain backdrop",
+     "hero product shot centred on a plain gradient backdrop, soft floor "
+     "reflection, studio lighting",
      "Disponible ya.",
      "static hero shot, slow zoom out"),
 ]
+
+# --- Ancla de estilo ---------------------------------------------------------
+# Las 3 escenas tienen que parecer del MISMO spot. Un generador de imagen sin
+# memoria entre llamadas no lo hace solo: si no le atas paleta, luz y
+# tratamiento, salen tres anuncios de tres marcas distintas. Esto es lo unico
+# que comparten los tres prompts, y es lo que da continuidad visual.
+_STYLE_ANCHORS: list[str] = [
+    "Consistent style across the whole spot: warm neutral palette of sand, cream "
+    "and terracotta, soft directional morning light, gentle haze, shallow depth "
+    "of field, fine 35mm film grain, minimal uncluttered set",
+    "Consistent style across the whole spot: cool monochrome palette of slate, "
+    "glass and steel blue, crisp studio light with clean edge shadows, polished "
+    "surfaces, high micro-contrast, modern uncluttered set",
+    "Consistent style across the whole spot: deep moody palette of forest green, "
+    "charcoal and amber, a single warm key light in darkness, volumetric haze, "
+    "glossy reflections, cinematic contrast",
+    "Consistent style across the whole spot: bright airy palette of white, pale "
+    "blue and soft pastel, diffused overcast daylight, pale seamless backdrop, "
+    "soft shadows, editorial minimalism",
+]
+
+
+def style_anchor(brief: str) -> str:
+    """Ancla de estilo del spot. Deterministica por brief, distinta entre briefs.
+
+    Deterministica para que re-ejecutar el mismo job acierte en el cache (y no
+    pague otros 45 s por imagen); distinta entre briefs para que dos spots
+    seguidos no salgan clonados en el video de la demo.
+    """
+    h = int(hashlib.sha256(" ".join(brief.split()).lower().encode()).hexdigest()[:8], 16)
+    return _STYLE_ANCHORS[h % len(_STYLE_ANCHORS)]
+
+
+def _beat_indices(n: int) -> list[int]:
+    """Que beats coger para un spot de n escenas: SIEMPRE apertura y cierre.
+
+    Con n=3 (el default) sale apertura -> detalle -> cierre: entorno, textura y
+    heroe, que es un mini arco de verdad y no tres planos sueltos.
+    """
+    n = max(1, min(n, len(_BEATS)))
+    if n == 1:
+        return [0]
+    return [0, *range(1, n - 1), len(_BEATS) - 1]
 
 
 @dataclass
@@ -100,18 +167,25 @@ class JobResult:
 # --- Plan de escenas ---------------------------------------------------------
 
 def plan_scenes(brief: str, n: int = DEFAULT_SCENES, *,
-                seconds: float = DEFAULT_SECONDS) -> list[Scene]:
-    """Plan por plantilla. Deterministico, sin red, siempre disponible."""
-    n = max(1, min(n, len(_BEATS)))
+                seconds: float = DEFAULT_SECONDS,
+                style: str | None = None) -> list[Scene]:
+    """Plan por plantilla. Deterministico, sin red, siempre disponible.
+
+    El ancla de estilo se cose DENTRO de `keyframe_prompt` en vez de vivir en un
+    campo aparte: asi viaja gratis por `SceneRecord.spec`, y el refinado en
+    caliente (`refine_scene`) reconstruye la escena con el mismo look sin tener
+    que volver a calcularlo.
+    """
     short = " ".join(brief.split())[:90]
     subject = short.rstrip(".")
+    style = style or style_anchor(brief)
     out: list[Scene] = []
-    for i in range(n):
+    for pos, i in enumerate(_beat_indices(n)):
         title, shot, line, motion = _BEATS[i]
         out.append(Scene(
-            n=i + 1,
+            n=pos + 1,
             title=title,
-            keyframe_prompt=f"{shot}; subject: {subject}",
+            keyframe_prompt=f"{shot}; subject: {subject}. {style}",
             voiceover=line.format(brief_short=short),
             clip_prompt=motion,
             seconds=seconds,
@@ -132,12 +206,20 @@ def plan_scenes_llm(brief: str, n: int = DEFAULT_SCENES, *,
     import urllib.request
 
     prompt = (
-        f"Break this ad brief into exactly {n} scenes for a short product spot.\n\n"
+        f"You are a commercial director. Break this ad brief into exactly {n} "
+        f"scenes for a short product spot with a mini arc: establish, then a "
+        f"detail, then a hero closing shot.\n\n"
         f"BRIEF: {brief.strip()}\n\n"
-        'Reply with ONLY a JSON array, one object per scene, keys exactly: '
-        '"title" (1-2 words), "keyframe" (visual description of the first frame), '
-        '"voiceover" (one short spoken sentence), "motion" (camera movement). '
-        "No prose, no markdown fence."
+        "HARD RULES for every keyframe description:\n"
+        "- Wide shots, still lifes, product and macro texture ONLY.\n"
+        "- NEVER a human face, a portrait, a person or hands in frame.\n"
+        "- No on-screen text, no readable logos, no brand names.\n\n"
+        'Reply with ONLY a JSON object, no prose and no markdown fence, keys '
+        'exactly: "style" (one sentence naming the palette, the lighting and the '
+        'film treatment SHARED by every scene, so the spot looks like one piece) '
+        'and "scenes" (array of objects with keys "title" (1-2 words), "keyframe" '
+        '(visual description of the first frame), "voiceover" (one short spoken '
+        'sentence in the language of the brief), "motion" (camera movement)).'
     )
     payload = {"model": "meta/llama-3.3-70b-instruct", "temperature": 0.4,
                "max_tokens": 900,
@@ -150,23 +232,51 @@ def plan_scenes_llm(brief: str, n: int = DEFAULT_SCENES, *,
                      "Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
             raw = json.loads(resp.read().decode())["choices"][0]["message"]["content"]
-        start, end = raw.find("["), raw.rfind("]")
-        items = json.loads(raw[start:end + 1])
+        items, style = _parse_plan(raw)
+        # Si el modelo se olvida del estilo, el ancla local: nunca sin ancla, o
+        # las 3 escenas salen de tres anuncios distintos.
+        style = style or style_anchor(brief)
         scenes = [
             Scene(n=i + 1,
                   title=str(it["title"])[:24],
-                  keyframe_prompt=str(it["keyframe"]),
+                  # El ancla se cose en el prompt de cada escena, igual que en la
+                  # plantilla: es lo que las hace parecer el mismo spot.
+                  keyframe_prompt=f"{str(it['keyframe']).rstrip('. ')}. {style}",
                   voiceover=str(it["voiceover"]),
                   clip_prompt=str(it.get("motion", "slow push-in")),
                   seconds=seconds)
             for i, it in enumerate(items[:n])
         ]
         if scenes:
-            logger.info("plan de escenas generado por NIM chat (%d escenas)", len(scenes))
+            logger.info("plan de escenas generado por NIM chat (%d escenas, "
+                        "estilo: %s...)", len(scenes), style[:60])
             return scenes
     except Exception as exc:  # noqa: BLE001 - el plan LLM es un extra
         logger.warning("plan por LLM fallo (%s); uso la plantilla", exc)
     return None
+
+
+def _parse_plan(raw: str) -> tuple[list[dict[str, Any]], str | None]:
+    """Saca (escenas, estilo) de la respuesta del LLM.
+
+    Acepta las dos formas: el objeto `{"style": ..., "scenes": [...]}` que se
+    pide ahora y el array pelado que devolvia la version anterior (los modelos
+    de 70B ignoran el formato de vez en cuando y no vale la pena tirar el plan
+    por eso).
+    """
+    start, end = raw.find("{"), raw.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            data = json.loads(raw[start:end + 1])
+            if isinstance(data, dict) and isinstance(data.get("scenes"), list):
+                return data["scenes"], (str(data["style"]).strip()
+                                        if data.get("style") else None)
+        except ValueError:
+            pass
+    start, end = raw.find("["), raw.rfind("]")
+    if start < 0 or end <= start:
+        raise ValueError("la respuesta del LLM no traia ni objeto ni array JSON")
+    return json.loads(raw[start:end + 1]), None
 
 
 # --- Utilidades --------------------------------------------------------------
@@ -266,6 +376,35 @@ def concat_scenes(paths: list[str | Path], dest: str | Path) -> Path:
     return dest
 
 
+def sample_frames(paths: list[str | Path], dest_dir: str | Path,
+                  prefix: str = "") -> list[str]:
+    """Un fotograma del centro de cada escena, en jpg. Para mirarlas con los ojos.
+
+    Revisar un job en modo free abriendo 3 mp4 es lento; esto deja las 3 imagenes
+    en un directorio y se ven de un vistazo. Se coge el centro y no el primer
+    fotograma a proposito: en el centro el movimiento de Ken Burns ya se nota.
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    out: list[str] = []
+    for i, path in enumerate(paths, start=1):
+        path = Path(path)
+        try:
+            dur = float(subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", str(path)],
+                capture_output=True, text=True, check=True).stdout.strip() or 0.0)
+        except (subprocess.CalledProcessError, ValueError):
+            dur = 0.0
+        dest = dest_dir / f"{prefix}scene-{i}.jpg"
+        subprocess.run(
+            [P.ffmpeg_bin(), "-loglevel", "error", "-y", "-ss", f"{max(dur / 2, 0):.2f}",
+             "-i", str(path), "-frames:v", "1", "-q:v", "2", str(dest)],
+            capture_output=True, text=True, check=True)
+        out.append(str(dest))
+    return out
+
+
 def _emit(on_event, kind: str, **payload) -> None:
     if on_event is None:
         return
@@ -322,8 +461,8 @@ def run_job(
 
     result = JobResult(job_id=job_id, brief=brief)
     dead = chaos.dead()
-    logger.info("job %s: %d escenas, mock=%s, b2=%s, chaos=%s",
-                job_id, len(plan), mock if mock is not None else "auto",
+    logger.info("job %s: %d escenas, gen=%s, mock=%s, b2=%s, chaos=%s",
+                job_id, len(plan), gen_mode(), mock if mock is not None else "auto",
                 use_b2, dead or "-")
     _emit(on_event, "job_started", job_id=job_id, scenes=len(plan),
           brief=brief, chaos=dead)
@@ -542,6 +681,62 @@ def refine_scene(job_id: str, n: int, *, note: str | None = None,
     return str(dest)
 
 
+# --- Corpus pregenerado para la demo -----------------------------------------
+
+# Briefs de ejemplo del corpus. Tres categorias visuales distintas a proposito
+# (cosmetica / alimentacion / deporte) y con anclas de estilo distintas, para
+# que el video de la demo no enseñe tres veces el mismo anuncio.
+PREGEN_JOBS: list[tuple[str, str]] = [
+    ("demo-serum",
+     "un frasco de serum facial de una marca DTC, sobre marmol blanco, luz de manana"),
+    ("demo-cafe",
+     "una bolsa de cafe de especialidad de tueste artesanal, sobre madera oscura"),
+    ("demo-sneaker",
+     "una zapatilla de running ligera de una marca nueva, sobre asfalto mojado"),
+]
+
+
+def pregenerate(jobs: list[tuple[str, str]] | None = None, *,
+                n_scenes: int = DEFAULT_SCENES, seconds: float = DEFAULT_SECONDS,
+                out_dir: str | Path = "runs", use_b2: bool | None = False,
+                cache_dir: str | Path | None = ".cache/steps",
+                frames_dir: str | Path | None = None) -> list[JobResult]:
+    """Genera y CACHEA los jobs de ejemplo en modo free.
+
+    A ~45 s por imagen, un job de 3 escenas son ~2:20 de reloj. Nadie va a
+    esperar eso delante de la URL en vivo ni en mitad del video. Esto se lanza
+    antes (una vez), llena `KeyframeCorpus` y deja los mp4 en `runs/`, asi que
+    reproducir cualquiera de estos briefs despues es instantaneo: el corpus
+    acierta por prompt+seed aunque cambie el job_id.
+
+    Es idempotente: relanzarlo no regenera nada que ya este en el corpus.
+    """
+    os.environ["GEN_MODE"] = "free"     # el corpus solo tiene sentido en free
+    jobs = jobs or PREGEN_JOBS
+    results: list[JobResult] = []
+    corpus = KeyframeCorpus()
+    logger.info("pregeneracion: %d jobs x %d escenas en modo free; corpus %s "
+                "(%d imagenes ya dentro)", len(jobs), n_scenes, corpus.dir, len(corpus))
+
+    for job_id, brief in jobs:
+        t0 = time.monotonic()
+        try:
+            res = run_job(job_id, brief, n_scenes=n_scenes, seconds=seconds,
+                          mock=None, use_b2=use_b2, out_dir=out_dir,
+                          cache_dir=cache_dir, max_iterations=1, threshold=0.0)
+        except Exception as exc:  # noqa: BLE001 - un brief no puede tumbar el resto
+            logger.exception("pregeneracion de %s fallo: %s", job_id, exc)
+            continue
+        results.append(res)
+        if frames_dir:
+            sample_frames(res.scene_paths, frames_dir, prefix=f"{job_id}-")
+        logger.info("pregenerado %s en %.0f s -> %s", job_id,
+                    time.monotonic() - t0, res.final_mp4)
+
+    logger.info("corpus: %d imagenes en %s", len(KeyframeCorpus()), corpus.dir)
+    return results
+
+
 # --- CLI ---------------------------------------------------------------------
 
 def _setup_logging(verbose: bool) -> None:
@@ -566,6 +761,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seconds", type=float, default=DEFAULT_SECONDS)
     ap.add_argument("--mock", action="store_true", help="fuerza providers mock")
     ap.add_argument("--real", action="store_true", help="intenta providers reales")
+    ap.add_argument("--free", action="store_true",
+                    help="generacion REAL gratis: Pollinations + Ken Burns "
+                         "(equivale a GEN_MODE=free)")
+    ap.add_argument("--pregenerate", action="store_true",
+                    help="genera y cachea los briefs de ejemplo en modo free "
+                         "para que la demo no espere 45 s por imagen")
+    ap.add_argument("--frames", metavar="DIR", nargs="?", const="/tmp/real-scenes",
+                    help="guarda un fotograma del centro de cada escena en DIR "
+                         "(default /tmp/real-scenes)")
     ap.add_argument("--chaos", metavar="PROVIDER", nargs="?", const=CHAOS_KEY,
                     help=f"mata un proveedor antes de arrancar (default {CHAOS_KEY})")
     ap.add_argument("--no-chaos", action="store_true", help="resucita todo y sale")
@@ -596,6 +800,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.selftest:
         return selftest()
+
+    if args.free:
+        # El modo lo lee `scenes.gen_mode()` del entorno, que es tambien como lo
+        # activa el despliegue; la bandera solo es azucar para la linea de comandos.
+        os.environ["GEN_MODE"] = "free"
+
+    if args.pregenerate:
+        results = pregenerate(n_scenes=args.scenes, seconds=args.seconds,
+                              out_dir=args.out,
+                              use_b2=False if args.no_b2 else None,
+                              cache_dir=None if args.no_cache else ".cache/steps",
+                              frames_dir=args.frames)
+        print()
+        for res in results:
+            print(f"  {res.job_id:<14} {len(res.scenes)} escenas en "
+                  f"{res.elapsed_ms / 1000:6.1f}s -> {res.final_mp4}")
+        corpus = KeyframeCorpus()
+        print(f"  corpus: {len(corpus)} imagenes en {corpus.dir}")
+        print(f"  jobs cacheados: {len(results)}/{len(PREGEN_JOBS)}")
+        return 0 if len(results) == len(PREGEN_JOBS) else 1
 
     if args.no_chaos:
         chaos.reset()
@@ -648,6 +872,9 @@ def main(argv: list[str] | None = None) -> int:
         print("  failovers: ninguno (usa --chaos gmicloud para provocarlo)")
     print(f"  master: {result.final_mp4}")
     print(f"  agregado: {result.aggregate_written.get('b2_url') or result.aggregate_written['local']}")
+    if args.frames and result.scene_paths:
+        for shot in sample_frames(result.scene_paths, args.frames, prefix=f"{args.job}-"):
+            print(f"  frame de muestra: {shot}")
 
     if args.approve and result.final_mp4:
         info = M.approve(args.job, result.final_mp4, doc=result.aggregate,
@@ -698,10 +925,35 @@ def demo() -> None:
     os.environ["JUDGE_THRESHOLD"] = "0.0"   # sin red: el juez degrada a 0.5
     seen: list[str] = []
     try:
-        plan = plan_scenes("un frasco de serum facial sobre marmol", 2, seconds=1.0)
+        brief = "un frasco de serum facial sobre marmol"
+        plan = plan_scenes(brief, 2, seconds=1.0)
         assert [s.n for s in plan] == [1, 2]
         assert all(s.keyframe_prompt and s.voiceover and s.clip_prompt for s in plan)
         assert plan_scenes("x", 99)[0].n == 1 and len(plan_scenes("x", 99)) <= len(_BEATS)
+
+        # --- el plan cuenta un mini arco y comparte ancla de estilo -----------
+        three = plan_scenes(brief, 3)
+        assert [s.title for s in three] == ["apertura", "detalle", "cierre"], \
+            [s.title for s in three]
+        anchor = style_anchor(brief)
+        assert all(anchor in s.keyframe_prompt for s in three), \
+            "las 3 escenas tienen que compartir el ancla de estilo"
+        assert style_anchor(brief) == style_anchor(brief.upper() + "  ")
+        assert len({style_anchor(b) for b in
+                    ("cafe de especialidad", "zapatilla de running",
+                     "serum facial", "silla de diseno")}) > 1, \
+            "el ancla no varia entre briefs: los spots saldrian clonados"
+        # Ni un plano con personas: el generador real hace caras de plastico.
+        # Por palabra completa: "surface" contiene "face" y es legitimo.
+        banned = re.compile(r"\b(face|faces|portrait|person|people|hands|model)\b")
+        for beat in _BEATS:
+            shot = beat[1].lower().replace("no people", "")   # la exclusion vale
+            assert not banned.search(shot), beat
+        # El plan del LLM acepta las dos formas de respuesta.
+        items, style = _parse_plan('ruido {"style": "S", "scenes": [{"title": "t"}]} fin')
+        assert items == [{"title": "t"}] and style == "S", (items, style)
+        items, style = _parse_plan('[{"title": "t"}]')
+        assert items == [{"title": "t"}] and style is None, (items, style)
 
         res = run_job("demojob", "un frasco de serum facial sobre marmol",
                       on_scene=seen.append, scenes=plan, mock=True, use_b2=False,
@@ -715,6 +967,11 @@ def demo() -> None:
         # Parametros identicos -> concatenable con -c copy.
         assert len({video_params(p) for p in seen}) == 1
         assert res.final_mp4 and Path(res.final_mp4).is_file()
+
+        # Frames de muestra: es como se revisa un job en modo free sin abrir mp4s.
+        shots = sample_frames(res.scene_paths, tmp / "frames", prefix="demojob-")
+        assert len(shots) == 2, shots
+        assert all(Path(s).is_file() and Path(s).stat().st_size > 1024 for s in shots)
 
         # Lineage y agregado.
         assert res.scenes[1].parent_run_id == res.scenes[0].run_id, \
