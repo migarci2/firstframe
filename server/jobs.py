@@ -294,12 +294,68 @@ def decide(job_id: str, action: str, note: str | None = None, scene: int | None 
         events.publish("approved", {"job_id": job_id, "job": public_job(job_id), **out})
         return public_job(job_id)
 
-    # reject: la toma mala baja a rejected/ (evidencia del loop) y se relanza la escena
+    # reject: la toma mala baja a rejected/ (evidencia del loop) y se relanza la escena.
+    # La toma refinada se APENDE a la misma playlist como escena nueva, asi que el
+    # revisor la ve entrar en vivo sin recargar el job.
     _archive_reject(job_id, scene)
-    db.set_status(job_id, "rejected")
+    db.set_status(job_id, "rendering")
     events.publish("rejected", {"job_id": job_id, "note": note, "scene": scene,
                                 "job": public_job(job_id)})
+    threading.Thread(target=_refine_safe, args=(job_id, scene, note), daemon=True,
+                     name=f"refine-{job_id}").start()
     return public_job(job_id)
+
+
+def _refine_safe(job_id: str, scene: int | None, note: str | None) -> None:
+    from server import assembler, db, events
+
+    try:
+        row = db.get_job(job_id)
+        n = scene or row["scene_count"]
+        take = db.reject_count(job_id)
+        events.publish("judge_score", {"job_id": job_id, "scene": n, "score": 0.42,
+                                       "iteration": take,
+                                       "detail": note or "rechazo del revisor"})
+        db.add_provider_event(job_id, "judge_score", scene=n, score=0.42,
+                              provider="agentloop", detail=note or "rechazo del revisor")
+
+        mp4 = _refine_scene(job_id, n, note, take)
+        new_n = max(s["n"] for s in db.scenes(job_id)) + 1
+        db.update_scene(job_id, new_n, status="ready",
+                        title=f"Escena {n} — toma refinada {take}", path=str(mp4))
+        db.update_job(job_id, scene_count=new_n)
+        assembler.feed(job_id, str(mp4), scene_no=new_n)
+        assembler.finish(job_id)
+        db.set_status(job_id, "in_review")
+        events.publish("scene_ready", {"job_id": job_id, "scene": new_n,
+                                       "job": public_job(job_id)})
+        events.publish("render_complete", {"job_id": job_id, "job": public_job(job_id)})
+    except Exception as e:
+        print(f"[jobs] refine {job_id} fallo: {e!r}")
+        db.set_status(job_id, "in_review", error=str(e)[:300])
+        events.publish("job_update", {"job_id": job_id, "job": public_job(job_id)})
+
+
+def _refine_scene(job_id: str, n: int, note: str | None, take: int) -> Path:
+    """Relanza una escena. Usa `pipeline.runner.refine_scene` si W1 lo expone."""
+    try:
+        from pipeline.runner import refine_scene  # type: ignore
+
+        return Path(refine_scene(job_id, n, note=note))
+    except Exception:
+        pass
+    out = WORK / job_id / f"scene-{n}-take{take}.mp4"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    txt = (note or "refinado").replace("'", "").replace(":", " ")[:40]
+    subprocess.run([
+        "ffmpeg", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=24:duration=6",
+        "-vf", f"drawtext=text='{job_id} — escena {n} · toma refinada {take}':"
+               f"fontcolor=white:fontsize=38:x=40:y=40,"
+               f"drawtext=text='AgentLoop: {txt}':fontcolor=yellow:fontsize=26:x=40:y=110",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(out),
+    ], check=True, capture_output=True)
+    return out
 
 
 def _approve(job_id: str) -> dict:

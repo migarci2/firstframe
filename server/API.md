@@ -113,8 +113,12 @@ req  → { "action": "approve" | "reject", "note": "logo ilegible", "scene": 3 }
 ```
 - `approve`: embebe el manifest en el mp4 final, lo sube a `approved/{id}/final.mp4` con
   Object Lock GOVERNANCE +30d, emite SSE `approved`. Devuelve el job ya con `lock` puesto.
-- `reject`: copia la toma a `rejected/{id}/take-{k}.mp4` y relanza la escena indicada
-  (o la última) por el AgentLoop. Emite SSE `job_update` con status `rendering`.
+- `reject`: copia la toma a `rejected/{id}/take-{k}.mp4`, pone el job en `rendering` y
+  relanza la escena indicada (o la última). **La toma refinada se añade a la MISMA
+  playlist como escena nueva**, así que entra en vivo. Secuencia de SSE:
+  `rejected` → `judge_score` → `segment_landed`… → `scene_ready` → `render_complete`.
+  Como la playlist ya tenía `#EXT-X-ENDLIST`, hls.js la considera VOD: al recibir
+  `rejected`, el front debe **volver a llamar a `hls.loadSource(...)`** para reengancharse.
 - `scene` es opcional; solo se usa en `reject`.
 
 ### `GET /api/events` — SSE
