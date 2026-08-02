@@ -256,8 +256,17 @@ def _call_runner(runner, job_id: str, brief: str, scene_count: int, on_scene, on
         kwargs["n_scenes"] = scene_count
     elif "scenes" in params:
         kwargs["scenes"] = scene_count
-    if "mock" in params and os.getenv("DEMO_MODE", "mock") == "mock":
-        kwargs["mock"] = True
+    # El modo de generacion lo decide pipeline.scenes (GEN_MODE, con DEMO_MODE como
+    # respaldo). Aqui solo forzamos mock cuando ESE calculo dice mock; si preguntamos
+    # por DEMO_MODE a secas, un `GEN_MODE=free` acaba renderizando testsrc2 igualmente.
+    if "mock" in params:
+        try:
+            from pipeline.scenes import gen_mode
+            effective = gen_mode()
+        except Exception:
+            effective = os.getenv("GEN_MODE") or os.getenv("DEMO_MODE") or "mock"
+        if effective == "mock":
+            kwargs["mock"] = True
     # El juez de vision de NIM (free tier) timeoutea a los ~30 s y degrada a 0.50, que
     # esta por debajo del threshold -> otra iteracion -> otros 30 s. Con eso el first
     # frame se va a 70 s. Se acotan las iteraciones y se permite apagar el juez
