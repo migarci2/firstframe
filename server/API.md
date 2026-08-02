@@ -157,11 +157,20 @@ al terminar aparece `#EXT-X-ENDLIST`. Los `URI`/rutas de los segmentos son **rel
 
 **Para W3 — verificado en Chrome con hls.js 1.5, no hace falta que hagas nada especial:**
 llama a `hls.loadSource('/stream/{id}/index.m3u8')` **inmediatamente** después del
-`POST /api/jobs`. El servidor **retiene** esa primera petición hasta 6 s esperando al
-primer segmento (que llega a ~3 s), así que la primera respuesta ya trae contenido.
+`POST /api/jobs`. Dos protecciones del backend hacen que eso siempre funcione:
+1. Al crear el job se publica una **cabecera de 2 s** ("FirstFrame · LIVE / generando N
+   escenas"), así que la playlist existe ~2 s después del POST aunque la primera escena
+   real tarde 10 s. Es el segmento de `scene: 0`; no entra en el `final.mp4` aprobado.
+2. El servidor además **retiene** la primera petición del m3u8 hasta 6 s esperando al
+   primer segmento.
+
 Motivo: si el primer GET devuelve **404**, hls.js lanza `manifestLoadError` FATAL y
 **no reintenta nunca**; si devuelve una playlist EVENT **vacía**, lanza `levelEmptyError`
 con el mismo resultado. Ambos casos probados y descartados.
+
+Mientras la escena 1 se genera verás `bufferStalledError` / `bufferNudgeOnStall` en la
+consola: son **no fatales**, hls.js se recupera solo y sigue reproduciendo cuando entran
+los siguientes segmentos. No los trates como error en la UI.
 
 ```
 404 → el job no existe, o pasaron 6 s sin primer segmento (reintenta cada ~700 ms)
