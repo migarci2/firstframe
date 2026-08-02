@@ -127,6 +127,11 @@ class SceneRecord:
     title: str
     run_id: str
     parent_run_id: str | None = None
+    # run_id de la escena ANTERIOR. `parent_run_id` apunta a la iteracion
+    # previa cuando el AgentLoop refino (el SDK lo reescribe con
+    # from_result), asi que la cadena entre escenas se guarda aparte.
+    chain_parent_run_id: str | None = None
+    first_run_id: str | None = None
     iterations: int = 1
     passed: bool = True
     judge: dict[str, Any] = field(default_factory=dict)
@@ -174,6 +179,8 @@ def scene_record_from_result(scene_n: int, title: str, agent_result,
         title=title,
         run_id=run.run_id,
         parent_run_id=run.parent_run_id,
+        first_run_id=(agent_result.iterations[0].result.run.run_id
+                      if agent_result.iterations else run.run_id),
         iterations=len(agent_result.iterations),
         passed=agent_result.passed,
         judge=judge or {},
@@ -217,7 +224,10 @@ def build_aggregate(job_id: str, brief: str, scenes: list[SceneRecord],
         "refined_scenes": [s.n for s in scenes if s.iterations > 1],
         "failovers": [{"scene": s.n, **f} for s in scenes for f in s.fallbacks],
         "lineage": [{"scene": s.n, "run_id": s.run_id,
-                     "parent_run_id": s.parent_run_id} for s in scenes],
+                     "first_run_id": s.first_run_id,
+                     "parent_run_id": s.parent_run_id,
+                     "chain_parent_run_id": s.chain_parent_run_id}
+                    for s in scenes],
         "scenes": [s.as_dict() for s in scenes],
     }
     if extra:
@@ -346,24 +356,35 @@ def approve(job_id: str, final_mp4: str | Path, *,
     s3, bucket = _s3()
     retain_until = datetime.now(timezone.utc) + timedelta(days=retain_days)
     key = f"{approved_prefix(job_id)}/final.mp4"
+    master_bytes = out_path.read_bytes()
+    master_sha256 = hashlib.sha256(master_bytes).hexdigest()
     s3.put_object(
-        Bucket=bucket, Key=key, Body=out_path.read_bytes(),
+        Bucket=bucket, Key=key, Body=master_bytes,
         ContentType="video/mp4",
         ObjectLockMode=LOCK_MODE,
         ObjectLockRetainUntilDate=retain_until,
     )
     result["keys"]["master"] = key
+    result["master_sha256"] = master_sha256
     result["lock"] = {"mode": LOCK_MODE, "retain_until": retain_until.isoformat()}
 
     # El manifest de approved/ lo escribe el SINK con manifest_lock: queda WORM.
     # Sink NUEVO y close() en finally — es de un solo uso.
+    #
+    # GOTCHA: `AssetTransfer` solo lee `file://` bajo `tempfile.gettempdir()`
+    # o `/tmp` (`ALLOWED_FILE_ROOTS`) y `ObjectStorageSink` nunca le pasa
+    # `allowed_roots`. Un master en `runs/` da "Access denied ... outside
+    # allowed directories", asi que se copia a temp antes de la ingesta.
+    staging = Path(tempfile.mkdtemp(prefix=f"ff-approve-{job_id}-"))
+    staged = staging / "final.mp4"
+    shutil.copyfile(out_path, staged)
     sink = ObjectStorageSink(backend(), prefix=approved_prefix(job_id),
                              manifest_lock=lock_config(retain_days))
     try:
         ingest = Pipeline.ingest(
-            assets=[Asset(url=out_path.resolve().as_uri(), media_type="video/mp4",
-                          sha256=hashlib.sha256(out_path.read_bytes()).hexdigest(),
-                          size_bytes=out_path.stat().st_size)],
+            assets=[Asset(url=staged.resolve().as_uri(), media_type="video/mp4",
+                          sha256=hashlib.sha256(staged.read_bytes()).hexdigest(),
+                          size_bytes=staged.stat().st_size)],
             source=f"firstframe://{job_id}/approved",
             source_metadata={"job_id": job_id, "master_key": key,
                              "aggregate_manifest": prov_key(job_id)},
@@ -374,10 +395,12 @@ def approve(job_id: str, final_mp4: str | Path, *,
         result["approved_run_id"] = ingest.run.run_id
     finally:
         sink.close()
+        shutil.rmtree(staging, ignore_errors=True)
 
     # El agregado tambien deja constancia de la aprobacion.
     doc["approved"] = {k: result[k] for k in ("keys", "lock", "canonical_hash",
-                                              "embed_method", "embed_verified")}
+                                              "embed_method", "embed_verified",
+                                              "master_sha256")}
     write_aggregate(job_id, doc, local_dir=local_dir)
     logger.info("aprobado: s3://%s/%s con lock %s hasta %s",
                 bucket, key, LOCK_MODE, retain_until.isoformat())
@@ -386,7 +409,28 @@ def approve(job_id: str, final_mp4: str | Path, *,
 
 # --- 3. Verificacion ---------------------------------------------------------
 
-def _fetch_bytes(url: str, *, s3=None, bucket: str | None = None) -> bytes:
+def b2_key_from_url(url: str) -> tuple[str, str] | None:
+    """(bucket, key) si la URL apunta al endpoint S3 de B2; None si no.
+
+    Hace falta porque `ObjectStorageSink` REESCRIBE `asset.url` a
+    `https://s3.{region}.backblazeb2.com/{bucket}/{key}` (path-style) durante
+    el run. El bucket es privado: un GET anonimo devuelve 401. Cualquiera que
+    quiera releer un asset despues del run (el juez, el runner, `verify`)
+    tiene que firmar la peticion.
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if not parsed.netloc.endswith(".backblazeb2.com"):
+        return None
+    parts = parsed.path.lstrip("/").split("/", 1)
+    if len(parts) != 2 or not parts[1]:
+        return None
+    return parts[0], urllib.parse.unquote(parts[1])
+
+
+def fetch_bytes(url: str, *, s3=None, bucket: str | None = None) -> bytes:
+    """Descarga un asset: `file://`, `s3://`, B2 firmado o https normal."""
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme == "file":
         return Path(urllib.parse.unquote(parsed.path)).read_bytes()
@@ -396,10 +440,19 @@ def _fetch_bytes(url: str, *, s3=None, bucket: str | None = None) -> bytes:
         return s3.get_object(Bucket=parsed.netloc or bucket,
                              Key=parsed.path.lstrip("/"))["Body"].read()
     if parsed.scheme in ("http", "https"):
+        b2 = b2_key_from_url(url)
+        if b2 is not None and b2_enabled():
+            if s3 is None:
+                s3, bucket = _s3()
+            return s3.get_object(Bucket=b2[0], Key=b2[1])["Body"].read()
         req = urllib.request.Request(url, headers={"User-Agent": "firstframe/1.0"})
         with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
             return resp.read()
     raise ValueError(f"esquema no soportado: {url!r}")
+
+
+# Alias historico: el resto del paquete llamaba a `_fetch_bytes`.
+_fetch_bytes = fetch_bytes
 
 
 def verify(job_id: str, *, fetch: bool = True,
@@ -482,14 +535,23 @@ def verify(job_id: str, *, fetch: bool = True,
                         entry["ok"] = (got == asset.sha256)
                         entry["expected"] = asset.sha256
                         entry["actual"] = got
+                    except FileNotFoundError:
+                        # El manifest embebido describe el master ANTES de
+                        # embeber, que vive en local. Si el que verifica no es
+                        # la maquina que genero, no es un fallo: se salta y el
+                        # peso recae en el check remoto de mas abajo.
+                        entry["ok"] = None
+                        entry["skipped"] = "asset local no disponible aqui"
                     except Exception as exc:  # noqa: BLE001
                         entry["ok"] = False
                         entry["error"] = str(exc)
-                    assets_ok &= bool(entry["ok"])
+                    if entry["ok"] is not None:
+                        assets_ok &= bool(entry["ok"])
                     report["checks"].append(entry)
             report["fetched"] = True
 
         # El agregado del job es parte de la procedencia: tambien se comprueba.
+        doc = None
         try:
             doc = read_aggregate(job_id, local_dir=local_dir)
             report["scene_count"] = doc.get("scene_count")
@@ -499,6 +561,17 @@ def verify(job_id: str, *, fetch: bool = True,
         except Exception as exc:  # noqa: BLE001
             report["checks"].append({"check": "aggregate_manifest", "ok": False,
                                      "error": str(exc)})
+
+        # Check REMOTO de verdad: el master que hay en B2 ahora mismo tiene
+        # que ser byte a byte el que se aprobo. Es lo que un tercero puede
+        # comprobar sin acceso a la maquina que genero.
+        expected = (doc or {}).get("approved", {}).get("master_sha256")
+        if expected:
+            got = hashlib.sha256(master.read_bytes()).hexdigest()
+            ok = got == expected
+            assets_ok &= ok
+            report["checks"].append({"check": "approved_master_sha256", "ok": ok,
+                                     "expected": expected, "actual": got})
 
         report["ok"] = hash_ok and bool(struct.ok) and assets_ok and not report["errors"]
     return report
