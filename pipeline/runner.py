@@ -439,9 +439,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--verify", action="store_true",
                     help="al terminar: verify --fetch sobre el master aprobado")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--selftest", action="store_true",
+                    help="corre el demo() de los 6 modulos y sale")
     args = ap.parse_args(argv)
 
     _setup_logging(args.verbose)
+
+    if args.selftest:
+        return selftest()
 
     if args.no_chaos:
         chaos.reset()
@@ -505,6 +510,25 @@ def main(argv: list[str] | None = None) -> int:
         if not report["ok"]:
             return 1
     return 0
+
+
+def selftest() -> int:
+    """Corre el demo() de los 6 modulos del pipeline. Un comando, todo verde."""
+    import importlib
+
+    mods = ["pipeline.chaos", "pipeline.providers", "pipeline.judge",
+            "pipeline.scenes", "pipeline.manifest", "pipeline.runner"]
+    failures = 0
+    for name in mods:
+        fn = demo if name == "pipeline.runner" else importlib.import_module(name).demo
+        print(f"\n=== {name}.demo() ===")
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001
+            failures += 1
+            print(f"FALLO en {name}: {type(exc).__name__}: {exc}")
+    print(f"\nselftest: {len(mods) - failures}/{len(mods)} modulos en verde")
+    return 1 if failures else 0
 
 
 def demo() -> None:
