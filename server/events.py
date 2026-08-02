@@ -41,6 +41,16 @@ _poller: threading.Thread | None = None
 _stop = threading.Event()
 
 _recent: list[dict] = []          # buffer para debug / health
+_poll_wake = threading.Event()    # despierta al poller cuando aparece un job
+
+
+def wake() -> None:
+    """Saca al poller de su siesta larga (lo llama `jobs.create_job`).
+
+    Sin esto, un job creado durante el intervalo de reposo (60 s) tardaria hasta un
+    minuto en entrar en la rotacion. Asi el intervalo largo no cuesta reactividad.
+    """
+    _poll_wake.set()
 
 
 def secret() -> bytes:
@@ -48,6 +58,12 @@ def secret() -> bytes:
 
 
 def mode() -> str:
+    """`webhook` | `poll` | `both` | `off`.
+
+    `off` = ni webhook ni poller tocan B2. Es el modo de emergencia si la cuenta se
+    queda sin cuota de transacciones: la app sigue entera porque todos los eventos que
+    mueven la UI (segmentos, escenas, approve) los emite el propio backend.
+    """
     return os.getenv("EVENTS_MODE", "both").lower()
 
 
@@ -114,6 +130,8 @@ def recent(limit: int = 50) -> list[dict]:
 # ------------------------------------------------------------------ webhook
 def handle_webhook(raw: bytes, signature: str | None) -> tuple[bool, int]:
     """Ack rapido: verifica, deduplica y encola. Devuelve (firma_ok, encolados)."""
+    if mode() == "off":
+        return True, 0
     if not verify(raw, signature):
         return False, 0
     try:
@@ -207,39 +225,77 @@ def _dispatch(ev: dict) -> None:
 class Poller(threading.Thread):
     """Fallback obligatorio: mismos eventos internos, sin depender de webhooks.
 
-    Un `list_objects_v2` cada 2 s sobre los prefijos que importan. La deduplicacion
-    la hace la misma tabla `events` que usa el webhook, asi que con EVENTS_MODE=both
+    **Presupuesto de transacciones.** La primera version listaba 4 prefijos cada 2 s:
+    120 `list_objects_v2` por minuto, que es Class C. Con eso nos comimos el tope diario
+    de la cuenta free en una tarde de integracion. Ahora:
+      - **un solo prefijo por tick**, rotando (no 4);
+      - intervalo **adaptativo**: `B2_POLL_ACTIVE_S` (10 s) solo mientras hay un job
+        vivo, `B2_POLL_IDLE_S` (60 s) cuando no hay nada que mirar;
+      - mientras hay job vivo se mira **su** prefijo `incoming/{job}/`, no `incoming/`
+        entero;
+      - si B2 marca cap, el poller **se para** hasta que se enfrie.
+    De 3600 listados/hora a ~110 en reposo y ~360 con un job corriendo.
+
+    La deduplicacion la sigue haciendo la tabla `events`, asi que con EVENTS_MODE=both
     lo que ya vio el webhook aqui es un no-op.
     """
 
-    PREFIXES = ("incoming/", "approved/", "provenance/", "rejected/")
+    PREFIXES = ("approved/", "provenance/", "rejected/")
 
-    def __init__(self, interval: float = 2.0):
+    def __init__(self, interval: float | None = None):
         super().__init__(daemon=True, name="b2-poller")
-        self.interval = interval
+        self.active_interval = float(os.getenv("B2_POLL_ACTIVE_S", interval or 10))
+        self.idle_interval = float(os.getenv("B2_POLL_IDLE_S", "60"))
         self.ticks = 0
+        self.listings = 0
+        self._rot = 0
+
+    def _next_prefix(self, active_jobs: list[str]) -> str:
+        """Un prefijo por tick. Los jobs vivos entran en la rotacion, acotados a su id."""
+        pool = [f"incoming/{j}/" for j in active_jobs] + list(self.PREFIXES)
+        self._rot = (self._rot + 1) % len(pool)
+        return pool[self._rot]
 
     def run(self) -> None:
         from server import b2, db
 
-        if not b2.available():
+        if not b2.has_credentials():
             print("[events] poller: sin credenciales B2, no arranca")
             return
+        print(f"[events] poller: {self.active_interval:.0f}s con job vivo / "
+              f"{self.idle_interval:.0f}s en reposo, 1 prefijo por tick")
         while not _stop.is_set():
+            interval = self.idle_interval
             try:
+                if b2.capped():
+                    print("[events] poller en pausa: cap de transacciones de B2")
+                    _stop.wait(30)
+                    continue
+                active = [j["id"] for j in db.all_jobs()
+                          if j["status"] in ("queued", "rendering")]
+                interval = self.active_interval if active else self.idle_interval
                 self.ticks += 1
-                for prefix in self.PREFIXES:
-                    for o in b2.list_prefix(prefix, max_keys=500):
-                        ev = {"objectName": o["key"], "eventType": "b2:ObjectCreated:Upload",
-                              "eventVersion": o["etag"], "_source": "poll"}
-                        eid = _synth_id("poll", ev)
-                        if db.record_event(eid, "poll", kind=ev["eventType"],
-                                           job_id=_job_from_key(o["key"]),
-                                           key=o["key"], payload=ev):
-                            _work.put_nowait((eid, ev))
+                prefix = self._next_prefix(active)
+                self.listings += 1
+                for o in b2.list_prefix(prefix, max_keys=200, ttl=0):
+                    ev = {"objectName": o["key"], "eventType": "b2:ObjectCreated:Upload",
+                          "eventVersion": o["etag"], "_source": "poll"}
+                    eid = _synth_id("poll", ev)
+                    if db.record_event(eid, "poll", kind=ev["eventType"],
+                                       job_id=_job_from_key(o["key"]),
+                                       key=o["key"], payload=ev):
+                        _work.put_nowait((eid, ev))
             except Exception as e:
                 print(f"[events] poller error: {e!r}")
-            _stop.wait(self.interval)
+            self._nap(interval)
+
+    def _nap(self, interval: float) -> None:
+        """Duerme `interval`, pero se despierta antes si aparece un job (`wake()`)."""
+        end = time.time() + interval
+        while not _stop.is_set() and time.time() < end:
+            if _poll_wake.wait(min(1.0, end - time.time())):
+                _poll_wake.clear()
+                return
 
 
 # ------------------------------------------------------------------ ciclo de vida
@@ -256,7 +312,20 @@ def start(app=None) -> None:
     if mode() in ("poll", "both") and (_poller is None or not _poller.is_alive()):
         _poller = Poller()
         _poller.start()
-    print(f"[events] mode={mode()} worker=on poller={'on' if _poller else 'off'}")
+    elif mode() == "off":
+        print("[events] EVENTS_MODE=off: sin poller y el webhook devolvera 503")
+    print(f"[events] mode={mode()} worker=on "
+          f"poller={'on' if _poller and _poller.is_alive() else 'off'}")
+
+
+def poller_stats() -> dict:
+    return {
+        "running": bool(_poller and _poller.is_alive()),
+        "ticks": _poller.ticks if _poller else 0,
+        "listings": _poller.listings if _poller else 0,
+        "active_interval_s": _poller.active_interval if _poller else None,
+        "idle_interval_s": _poller.idle_interval if _poller else None,
+    }
 
 
 def stop() -> None:
@@ -328,6 +397,34 @@ def demo() -> None:
     assert _job_from_key("approved/j_abc/final.mp4") == "j_abc"
     assert _job_from_key("otracosa/x") is None
     print("7. extraccion de job_id desde la clave OK")
+
+    # --- presupuesto de transacciones (esto es lo que tumbo la cuenta) -------------
+    p = Poller()
+    got = [p._next_prefix(["j_1"]) for _ in range(8)]
+    assert all(isinstance(g, str) for g in got)
+    assert len(set(got)) == 4, got                     # rota 1 prefijo por tick
+    assert "incoming/j_1/" in got, got                 # acotado al job, no a incoming/
+    assert not any(g == "incoming/" for g in got), got
+    print(f"8. poller: 1 prefijo por tick, rotando {sorted(set(got))} OK")
+
+    hourly_idle = 3600 / p.idle_interval
+    hourly_active = 3600 / p.active_interval
+    assert hourly_idle <= 120 and hourly_active <= 400, (hourly_idle, hourly_active)
+    print(f"9. presupuesto: {hourly_idle:.0f} listados/hora en reposo, "
+          f"{hourly_active:.0f}/hora con job vivo (antes: 7200/hora) OK")
+
+    os.environ["EVENTS_MODE"] = "off"
+    assert mode() == "off"
+    ok, n = handle_webhook(body, good)
+    assert ok is True and n == 0, (ok, n)
+    print("10. EVENTS_MODE=off: ni poller ni procesado de webhooks (modo sin cuota) OK")
+    os.environ["EVENTS_MODE"] = "both"
+
+    t0 = time.time()
+    threading.Timer(0.3, wake).start()
+    p._nap(30)
+    assert time.time() - t0 < 2, "wake() no despierta al poller"
+    print("11. wake() saca al poller de la siesta de 60 s al crear un job OK")
     print("events.demo OK")
 
 

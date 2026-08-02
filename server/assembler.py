@@ -167,13 +167,27 @@ def build_playlist(job_id: str, finished: bool = False) -> str:
     return "\n".join(out) + "\n"
 
 
+_last_playlist_upload: dict[str, float] = {}
+PLAYLIST_UPLOAD_EVERY_S = float(os.getenv("B2_PLAYLIST_UPLOAD_EVERY_S", "5"))
+
+
 def publish_playlist(job_id: str, finished: bool = False) -> str:
-    """Regenera la playlist, la deja en disco y la re-sube a B2."""
+    """Regenera la playlist, la deja en disco **siempre** y la sube a B2 con freno.
+
+    Lo que sirve al player es la version de disco/DB, que se regenera en cada segmento.
+    La copia de B2 es el artefacto durable (y lo que se enseña al jurado), asi que no
+    necesita subirse 1 vez por segmento: se sube como mucho cada
+    `B2_PLAYLIST_UPLOAD_EVERY_S`, y siempre al cerrar. Menos transacciones, mismo
+    resultado observable.
+    """
     body = build_playlist(job_id, finished)
     lp = HLS_DIR / job_id / "index.m3u8"
     lp.parent.mkdir(parents=True, exist_ok=True)
     lp.write_text(body)
-    _upload(playlist_key(job_id), body.encode(), "application/vnd.apple.mpegurl")
+    now = time.time()
+    if finished or now - _last_playlist_upload.get(job_id, 0) >= PLAYLIST_UPLOAD_EVERY_S:
+        if _upload(playlist_key(job_id), body.encode(), "application/vnd.apple.mpegurl"):
+            _last_playlist_upload[job_id] = now
     return body
 
 

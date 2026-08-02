@@ -220,8 +220,30 @@ Receptor de B2 Event Notifications. No lo llama el frontend.
 
 ### `GET /api/health`
 ```jsonc
-200 → { "ok": true, "mode": "mock", "events_mode": "both", "stub": false, "b2": true, "jobs": 3 }
+200 → {
+  "ok": true, "mode": "mock", "events_mode": "both", "stub": false, "b2": true, "jobs": 3,
+  "b2_capped": false,
+  "degraded": null,
+  "warning": null,                       // string si b2_capped: enséñalo como aviso en la UI
+  "b2_transactions": {                   // consumo desde el arranque
+    "total": 18,
+    "by_op": {"put_object": 15, "get_object_retention": 2, "list_objects_v2": 1},
+    "cache_hits": 9,
+    "capped": false, "cap_hit_ever": false, "cap_at": null, "cap_detail": null,
+    "calls_skipped_by_cap": 0, "cap_retry_in_s": 0
+  },
+  "poller": {"running": true, "ticks": 12, "listings": 12,
+             "active_interval_s": 10, "idle_interval_s": 60},
+  "hls_served_from": "auto (disco local primero)"
+}
 ```
+**Para W3:** si `degraded` es `true`, pinta un banner con `warning` (la cuenta de B2 se
+quedó sin cuota diaria de transacciones). La app sigue entera: reproducción, approve,
+manifest y verify funcionan desde disco local; lo único que falta es el badge de lock
+hasta que la cuota vuelva. `b2_transactions.total` es un número bonito para el dashboard.
+
+### `POST /api/health/reset-b2-stats`
+Pone el contador a cero y sale del enfriamiento del cap. Para medir un job limpio.
 
 ---
 
@@ -274,7 +296,12 @@ Segmentación: `-f hls -hls_time 4 -hls_list_size 0 -hls_flags append_list+indep
 | Var | Default | Qué hace |
 |---|---|---|
 | `DEMO_MODE` | `mock` | `mock` usa mocks/ffmpeg; cualquier otro valor intenta providers reales |
-| `EVENTS_MODE` | `both` | `webhook` \| `poll` \| `both` |
+| `EVENTS_MODE` | `both` | `webhook` \| `poll` \| `both` \| **`off`** (ni poller ni webhook tocan B2: modo de emergencia si se agota la cuota) |
+| `B2_POLL_ACTIVE_S` | `10` | intervalo del poller **con un job vivo** (1 prefijo por tick) |
+| `B2_POLL_IDLE_S` | `60` | intervalo del poller en reposo |
+| `B2_CAP_RETRY_S` | `300` | enfriamiento tras un `Transaction cap exceeded` |
+| `B2_PLAYLIST_UPLOAD_EVERY_S` | `5` | cada cuánto se re-sube el m3u8 a B2 (local siempre al día) |
+| `HLS_SERVE_FROM` | `auto` | `local` prohíbe leer segmentos de B2 aunque falten en disco |
 | `STUB` | `0` | `1` = todos los endpoints devuelven datos fake |
 | `B2_KEY_ID`, `B2_APP_KEY`, `B2_REGION`, `B2_BUCKET` | — | credenciales (de `.env`) |
 | `B2_WEBHOOK_SECRET` | `firstframe-dev-secret` | secreto HMAC de las Event Notifications |

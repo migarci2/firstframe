@@ -46,6 +46,7 @@ def _startup() -> None:
     jobs.resume_orphans()
     jobs.warm_runner()
     events.start(app)
+    jobs.start_retry_thread()
 
 
 @app.on_event("shutdown")
@@ -296,24 +297,48 @@ async def webhook(req: Request):
 # ---------------------------------------------------------------- health
 @app.get("/api/health")
 def health():
-    n = 3
-    b2ok = False
-    if not _stub():
-        try:
-            from server import db
+    """Estado + **consumo de transacciones de B2** desde el arranque.
 
-            n = len(db.all_jobs())
-        except Exception:
-            n = -1
-        b2ok = bool(os.getenv("B2_KEY_ID"))
+    El contador existe porque la cuenta free tiene tope diario y ya nos lo comimos una
+    vez: antes de grabar se mira aqui cuanto llevamos gastado.
+    """
+    if _stub():
+        return {"ok": True, "mode": "mock", "events_mode": "both", "stub": True,
+                "b2": False, "jobs": 3, "b2_transactions": {"total": 0, "by_op": {}}}
+    from server import b2, db, events
+
+    try:
+        n = len(db.all_jobs())
+    except Exception:
+        n = -1
+    tx = b2.stats()
     return {
         "ok": True,
         "mode": os.getenv("DEMO_MODE", "mock"),
-        "events_mode": os.getenv("EVENTS_MODE", "both"),
-        "stub": _stub(),
-        "b2": b2ok,
+        "events_mode": events.mode(),
+        "stub": False,
+        "b2": b2.has_credentials(),
+        "b2_capped": tx["capped"],
+        "degraded": tx["capped"] or None,
+        "warning": ("B2 sin cuota de transacciones: se sirve todo desde disco local; "
+                    "las subidas y los presigns vuelven solos al enfriarse")
+                   if tx["capped"] else None,
         "jobs": n,
+        "b2_transactions": tx,
+        "poller": events.poller_stats(),
+        "hls_served_from": os.getenv("HLS_SERVE_FROM", "auto") + " (disco local primero)",
     }
+
+
+@app.post("/api/health/reset-b2-stats")
+def reset_b2_stats():
+    """Pone a cero el contador (y sale del enfriamiento) — para medir un job limpio."""
+    if _stub():
+        return {"ok": True}
+    from server import b2
+
+    b2.reset_stats()
+    return {"ok": True, "b2_transactions": b2.stats()}
 
 
 async def _json(req: Request) -> dict:

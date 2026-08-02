@@ -81,13 +81,21 @@ def get_job_detail(job_id: str) -> dict | None:
     j = public_job(job_id)
     if not j:
         return None
+    # Los objetos del job se deducen de lo que ESTE backend subio (esta en la DB);
+    # a B2 solo se pregunta por el prefijo `approved/` y solo cuando el job ya esta
+    # aprobado, con TTL de 60 s. Antes eran 3 listados (Class C) por cada refresco de
+    # la UI, y eso es lo que agoto la cuota de la cuenta.
     objects = []
-    if b2.available():
+    row = db.get_job(job_id)
+    if row and row["manifest_key"]:
+        objects.append({"key": row["manifest_key"], "size": None, "at": row["created_at"]})
+    for k in range(1, db.reject_count(job_id) + 1):
+        objects.append({"key": f"rejected/{job_id}/take-{k}.mp4", "size": None, "at": None})
+    if row and row["status"] == "approved" and b2.available():
         try:
-            for pref in (f"approved/{job_id}/", f"provenance/{job_id}/", f"rejected/{job_id}/"):
-                objects += b2.list_prefix(pref, max_keys=20)
+            objects += b2.list_prefix(f"approved/{job_id}/", max_keys=20, ttl=60)
         except Exception:
-            pass
+            objects.append({"key": f"approved/{job_id}/final.mp4", "size": None, "at": None})
     return {
         "job": j,
         "provider_events": db.provider_events(job_id),
@@ -105,6 +113,7 @@ def create_job(brief: str, title: str | None = None, scenes: int | None = None) 
     n = max(1, min(int(scenes or DEFAULT_SCENES), 6))
     db.create_job(jid, brief, (title or brief)[:64], n)
     events.publish("job_update", {"job_id": jid, "job": public_job(jid)})
+    events.wake()   # el poller pasa de su intervalo de reposo al de job activo
     threading.Thread(target=_run_job_safe, args=(jid, brief, n), daemon=True,
                      name=f"job-{jid}").start()
     return public_job(jid)
@@ -345,7 +354,9 @@ def _write_manifest(job_id: str, result: dict | None) -> str | None:
             return key
         except Exception as e:
             print(f"[jobs] WARN manifest no subido: {e}")
-    return key if b2.available() else None
+    # aunque no se haya podido subir, la copia local existe y `get_manifest` la sirve:
+    # el panel de provenance funciona con la cuenta capada
+    return key
 
 
 def get_manifest(job_id: str) -> dict | None:
@@ -457,17 +468,27 @@ def _approve(job_id: str) -> dict:
     embedded = _embed_manifest(job_id, final)
     key = f"approved/{job_id}/final.mp4"
     lock = {"mode": None, "retain_until": None}
+    warning = None
     if b2.available():
-        b2.put_file(key, final, "video/mp4", lock_mode="GOVERNANCE", retain_days=30)
-        ret = b2.get_retention(key) or {}
-        lock = {"mode": ret.get("mode"), "retain_until": ret.get("retain_until")}
-        mkey = f"approved/{job_id}/manifest.json"
-        m = get_manifest(job_id) or {}
-        b2.put_bytes(mkey, json.dumps(m, indent=2, default=str).encode(),
-                     "application/json", lock_mode="GOVERNANCE", retain_days=30)
+        try:
+            b2.put_file(key, final, "video/mp4", lock_mode="GOVERNANCE", retain_days=30)
+            ret = b2.get_retention(key) or {}
+            lock = {"mode": ret.get("mode"), "retain_until": ret.get("retain_until")}
+            mkey = f"approved/{job_id}/manifest.json"
+            m = get_manifest(job_id) or {}
+            b2.put_bytes(mkey, json.dumps(m, indent=2, default=str).encode(),
+                         "application/json", lock_mode="GOVERNANCE", retain_days=30)
+        except b2.CapExceeded:
+            # La cuenta se quedo sin cuota a mitad del approve: el master y el manifest
+            # embebido existen en local y el job queda aprobado. No se pierde la demo.
+            warning = ("B2 sin cuota de transacciones: el master aprobado esta en local "
+                       "y se subira al reintentar; el lock se aplica entonces")
+            print(f"[jobs] {job_id} approve degradado: {warning}")
+    else:
+        warning = "sin B2 disponible: aprobado solo en local"
     db.set_status(job_id, "approved", lock_mode=lock["mode"], lock_until=lock["retain_until"])
     events.publish("job_update", {"job_id": job_id, "job": public_job(job_id)})
-    return {"key": key, "lock": lock, "embedded": embedded,
+    return {"key": key, "lock": lock, "embedded": embedded, "warning": warning,
             "size": final.stat().st_size}
 
 
@@ -596,6 +617,59 @@ def warm_runner() -> None:
             print(f"[jobs] pipeline.runner precargado en {time.time() - t:.1f} s")
 
     threading.Thread(target=_warm, daemon=True, name="warm-runner").start()
+
+
+def retry_pending_uploads() -> int:
+    """Reintenta lo que quedo sin subir por el cap de transacciones.
+
+    Un approve durante el cap deja el master en local y `lock_mode` a NULL. Cuando la
+    cuota vuelve, esto lo sube y le aplica el Object Lock sin que nadie tenga que
+    reaprobar nada.
+    """
+    from server import b2, db
+
+    if not b2.available():
+        return 0
+    fixed = 0
+    for row in db.all_jobs():
+        if row["status"] != "approved" or row["lock_mode"]:
+            continue
+        final = WORK / row["id"] / "final.mp4"
+        if not final.is_file():
+            continue
+        try:
+            key = f"approved/{row['id']}/final.mp4"
+            b2.put_file(key, final, "video/mp4", lock_mode="GOVERNANCE", retain_days=30)
+            ret = b2.get_retention(key, ttl=0) or {}
+            db.update_job(row["id"], lock_mode=ret.get("mode"),
+                          lock_until=ret.get("retain_until"))
+            m = get_manifest(row["id"]) or {}
+            b2.put_bytes(f"approved/{row['id']}/manifest.json",
+                         json.dumps(m, indent=2, default=str).encode(),
+                         "application/json", lock_mode="GOVERNANCE", retain_days=30)
+            fixed += 1
+            print(f"[jobs] {row['id']} subido y bloqueado al recuperarse la cuota")
+        except b2.CapExceeded:
+            break
+        except Exception as e:
+            print(f"[jobs] reintento de subida fallo para {row['id']}: {e!r}")
+    return fixed
+
+
+def start_retry_thread(interval: float = 120.0) -> None:
+    from server import events as _ev
+
+    def loop():
+        while not _ev._stop.is_set():
+            _ev._stop.wait(interval)
+            try:
+                n = retry_pending_uploads()
+                if n:
+                    _ev.publish("job_update", {"job_id": None, "recovered_uploads": n})
+            except Exception as e:
+                print(f"[jobs] retry thread: {e!r}")
+
+    threading.Thread(target=loop, daemon=True, name="upload-retry").start()
 
 
 def resume_orphans() -> None:

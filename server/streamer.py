@@ -17,6 +17,7 @@ Interfaz estable (la usa server/app.py):
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from pathlib import Path
 
@@ -100,9 +101,12 @@ async def read_playlist(job_id: str) -> bytes | None:
             break
         await asyncio.sleep(RETRY_SLEEP_S)
 
+    # la playlist se sirve de la DB o del disco; B2 solo si el proceso perdio ambos
     lp = _local_path(job_id)
     if lp.is_file():
         return lp.read_bytes()
+    if not _b2_usable():
+        return None
     got = await asyncio.to_thread(_fetch_sync, f"incoming/{job_id}/index.m3u8")
     return got[0] if got else None
 
@@ -111,27 +115,44 @@ async def read_playlist(job_id: str) -> bytes | None:
 async def read_range(job_id: str, name: str, range_header: str | None = None):
     """Devuelve (body, status, headers) o None si el segmento no aparece a tiempo.
 
-    Reintenta ante ausencia porque el segmento puede estar todavia subiendose:
-    la playlist va por delante del bucket a proposito.
+    **Disco local primero, y casi siempre solo disco local.** El assembler escribe cada
+    segmento en `data/hls/` ANTES de subirlo a B2, asi que el fichero ya esta aqui
+    cuando el player lo pide. Servirlo desde B2 costaba una transaccion Class B por
+    segmento **y por espectador** (un job de 3 escenas son ~10 segmentos), que es lo que
+    reventaba la cuota de la cuenta free. B2 sigue siendo el almacen durable —los
+    segmentos se suben igual, y lo que se sirve DESDE B2 con presigned URL son los
+    assets aprobados, que son pocos— pero la reproduccion ya no lo toca.
+
+    B2 queda como fallback de **una sola llamada**, al final del reintento, para el caso
+    de un proceso reiniciado que perdio el disco local. Con cap activo ni eso.
     """
     name = _safe(name)
     if not name:
         return None
-    key = f"incoming/{job_id}/seg/{name}"
     deadline = asyncio.get_event_loop().time() + RETRY_TOTAL_S
 
     while True:
-        # 1) disco local (instantaneo, es donde el assembler los escribe primero)
+        # 1) disco local: instantaneo, gratis, es la ruta normal
         lp = _local_path(job_id, name)
         if lp.is_file():
             return _serve_bytes(lp.read_bytes(), name, range_header)
-        # 2) B2
-        got = await asyncio.to_thread(_fetch_sync, key)
-        if got:
-            return _serve_bytes(got[0], name, range_header)
         if asyncio.get_event_loop().time() >= deadline:
-            return None
+            break
+        # el segmento puede estar cerrandose ahora mismo: la playlist va por delante
         await asyncio.sleep(RETRY_SLEEP_S)
+
+    # 2) fallback: UNA lectura de B2, solo si el disco local no lo tiene.
+    # HLS_SERVE_FROM=local lo prohibe del todo (modo ahorro de cuota).
+    if os.getenv("HLS_SERVE_FROM", "auto") == "local" or not _b2_usable():
+        return None
+    got = await asyncio.to_thread(_fetch_sync, f"incoming/{job_id}/seg/{name}")
+    return _serve_bytes(got[0], name, range_header) if got else None
+
+
+def _b2_usable() -> bool:
+    from server import b2
+
+    return b2.available()
 
 
 def _serve_bytes(data: bytes, name: str, range_header: str | None):
@@ -217,6 +238,17 @@ def demo() -> None:
         res = await read_range("j_late", "00001.ts")
         assert res and res[1] == 200 and res[0] == b"tarde pero llego", res
         print(f"4. segmento que aparece a los 0.6 s: servido 200 en {time.time()-t0:.1f} s OK")
+
+        # LO QUE REVENTO LA CUOTA: servir cada segmento desde B2. Ahora, cero.
+        from server import b2
+
+        before = b2.stats()["total"]
+        for i in range(20):
+            (seg / f"{i:05d}.ts").write_bytes(b"x" * 128)
+            r = await read_range("j_late", f"{i:05d}.ts")
+            assert r and r[1] == 200
+        assert b2.stats()["total"] == before, "reproducir NO puede tocar B2"
+        print("5. 20 segmentos servidos -> 0 transacciones de B2 OK")
 
     asyncio.run(_t())
     print("streamer.demo OK")
