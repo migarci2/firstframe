@@ -60,7 +60,8 @@ def main():
     # El header custom viaja en la peticion HTTP, no como parametro de boto3:
     # se inyecta en el evento before-send del cliente.
     def _inject(request, **_):
-        request.headers.add_header("x-backblaze-live-read-enabled", "true")
+        # HeadersDict: asignacion por clave, no add_header.
+        request.headers["x-backblaze-live-read-enabled"] = "true"
 
     s3.meta.events.register_first("before-send.s3.CreateMultipartUpload", _inject)
     s3.meta.events.register_first("before-send.s3.GetObject", _inject)
