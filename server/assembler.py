@@ -33,7 +33,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HLS_DIR = Path(os.getenv("FIRSTFRAME_HLS", ROOT / "data" / "hls"))
-SEG_SECONDS = float(os.getenv("HLS_SEG_SECONDS", "4"))
+# 2 s en vez de 4: el primer segmento no se puede publicar hasta que se cierra, asi que
+# el tamano del segmento ES el suelo del "first frame". 2 s da margen y hls.js lo traga.
+SEG_SECONDS = float(os.getenv("HLS_SEG_SECONDS", "2"))
 
 # Parametros comunes de §2 del plan. Todo mp4 que sale del pipeline pasa por aqui.
 VIDEO_ARGS = [
@@ -245,6 +247,12 @@ def feed(job_id: str, scene_path: str, *, scene_no: int | None = None) -> dict:
                     "name": name, "duration": dur, "scene": scene_no,
                 })
                 if seq == 1:
+                    # el cronometro de "first frame" para en cuanto el PRIMER segmento
+                    # esta disponible, no cuando termina la escena
+                    job = db.get_job(job_id)
+                    if job and job["started_at"] and not job["first_frame_ms"]:
+                        db.update_job(job_id,
+                                      first_frame_ms=db.now_ms() - job["started_at"])
                     events.publish("render_started", {"job_id": job_id, "at": db.now_ms(),
                                                       "scene": scene_no})
 
