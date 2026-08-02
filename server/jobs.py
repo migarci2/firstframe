@@ -122,9 +122,17 @@ def mark_rendering(job_id: str) -> None:
 def _run_job_safe(job_id: str, brief: str, scene_count: int) -> None:
     from server import db, events
 
+    from server import assembler
+
     t0 = time.time()
     db.set_status(job_id, "rendering", started_at=db.now_ms())
     events.publish("job_update", {"job_id": job_id, "job": public_job(job_id)})
+    # Cabecera inmediata: el player se engancha en ~1 s aunque la escena 1 tarde 10.
+    # En su propio thread para no meter su ~1.5 s en el cronometro de first frame;
+    # el lock por job del assembler garantiza que se lleva el seq 1 igualmente.
+    threading.Thread(
+        target=assembler.start_leader, daemon=True, name=f"leader-{job_id}",
+        args=(job_id, f"generando {scene_count} escenas — {brief[:40]}")).start()
     try:
         _run_job(job_id, brief, scene_count, t0)
     except Exception as e:

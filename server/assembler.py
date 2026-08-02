@@ -47,13 +47,15 @@ VIDEO_ARGS = [
 ]
 AUDIO_ARGS = ["-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2"]
 
-_job_locks: dict[str, threading.Lock] = {}
+# RLock: start_leader coge el lock del job y luego llama a feed(), que lo
+# vuelve a coger. Con un Lock normal eso es un deadlock.
+_job_locks: dict[str, threading.RLock] = {}
 _locks_guard = threading.Lock()
 
 
-def _job_lock(job_id: str) -> threading.Lock:
+def _job_lock(job_id: str) -> "threading.RLock":
     with _locks_guard:
-        return _job_locks.setdefault(job_id, threading.Lock())
+        return _job_locks.setdefault(job_id, threading.RLock())
 
 
 def local_dir(job_id: str) -> Path:
@@ -246,9 +248,9 @@ def feed(job_id: str, scene_path: str, *, scene_no: int | None = None) -> dict:
                     "job_id": job_id, "at": db.now_ms(), "seq": seq, "key": key,
                     "name": name, "duration": dur, "scene": scene_no,
                 })
-                if seq == 1:
-                    # el cronometro de "first frame" para en cuanto el PRIMER segmento
-                    # esta disponible, no cuando termina la escena
+                if scene_no != 0 and not db.get_job(job_id)["first_frame_ms"]:
+                    # el cronometro de "first frame" para en cuanto el primer segmento
+                    # de CONTENIDO REAL esta disponible (la cabecera no cuenta)
                     job = db.get_job(job_id)
                     if job and job["started_at"] and not job["first_frame_ms"]:
                         db.update_job(job_id,
@@ -277,6 +279,50 @@ def feed(job_id: str, scene_path: str, *, scene_no: int | None = None) -> dict:
         }
 
 
+def start_leader(job_id: str, text: str = "preparando la escena 1") -> dict | None:
+    """Publica una cabecera de 2 s ("slate") en cuanto se crea el job.
+
+    Por que existe: el player tiene que engancharse SIEMPRE, y la primera escena real
+    puede tardar 10 s o mas (el pipeline con providers de verdad). Verificado en Chrome:
+    si el primer m3u8 llega en 404 (o vacio), hls.js muere y no reintenta. Con esta
+    cabecera la playlist existe ~1 s despues del POST, el player entra en LIVE y las
+    escenas reales se van apendando detras. El rotulo dice literalmente que se esta
+    generando: no simula contenido, informa.
+    """
+    import tempfile
+
+    from server import db
+
+    db.init()
+    # el lock del job garantiza que la cabecera se lleva el seq 1 aunque la escena 1
+    # llegue mientras se genera: feed() espera a que esta suelte.
+    with _job_lock(job_id):
+        if db.segments(job_id):
+            return None
+        return _leader_inner(job_id, text)
+
+
+def _leader_inner(job_id: str, text: str) -> dict | None:
+    import tempfile
+
+    tmp = Path(tempfile.mkdtemp()) / "leader.mp4"
+    safe = text.replace("'", "").replace(":", " ")[:60]
+    try:
+        subprocess.run([
+            "ffmpeg", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "color=c=0x101014:s=1280x720:r=24:d=2",
+            "-vf", f"drawtext=text='FirstFrame · LIVE':fontcolor=white:fontsize=48:"
+                   f"x=(w-tw)/2:y=280,"
+                   f"drawtext=text='{safe}':fontcolor=0x9aa0a6:fontsize=28:"
+                   f"x=(w-tw)/2:y=360",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(tmp),
+        ], check=True, capture_output=True, timeout=30)
+        return feed(job_id, str(tmp), scene_no=0)
+    except Exception as e:
+        print(f"[assembler] WARN leader fallo: {e}")
+        return None
+
+
 def finish(job_id: str) -> None:
     """Cierra la playlist con #EXT-X-ENDLIST y la sube por ultima vez."""
     with _job_lock(job_id):
@@ -287,7 +333,8 @@ def concat_master(job_id: str, out_path: str | Path) -> Path:
     """Une todos los segmentos en un mp4 unico (para approve / final.mp4)."""
     from server import db
 
-    segs = db.segments(job_id)
+    # la cabecera (scene 0) es andamiaje del preview: fuera del master aprobado
+    segs = [s for s in db.segments(job_id) if s["scene"] != 0]
     if not segs:
         raise RuntimeError(f"job {job_id} no tiene segmentos")
     d = local_dir(job_id)
