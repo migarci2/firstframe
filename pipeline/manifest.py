@@ -142,6 +142,10 @@ class SceneRecord:
     steps: list[dict[str, Any]] = field(default_factory=list)
     fallbacks: list[dict[str, str]] = field(default_factory=list)
     local_path: str = ""
+    # Spec de la escena (titulo + los 3 prompts). Va al manifest para que
+    # `runner.refine_scene()` pueda relanzar UNA escena mucho despues, con la
+    # nota del revisor, sin volver a planificar el job entero.
+    spec: dict[str, Any] = field(default_factory=dict)
     duration_sec: float = 0.0
     cost_usd: float = 0.0
     elapsed_ms: int = 0
@@ -236,7 +240,8 @@ def build_aggregate(job_id: str, brief: str, scenes: list[SceneRecord],
 
 
 def write_aggregate(job_id: str, doc: dict[str, Any],
-                    *, local_dir: str | Path = "runs") -> dict[str, Any]:
+                    *, local_dir: str | Path = "runs",
+                    use_b2: bool | None = None) -> dict[str, Any]:
     """Escribe el agregado en local y, si hay B2, en `provenance/{job}/manifest.json`.
 
     Se sube como CUERPO del objeto. Meterlo en `Metadata=` reventaria: con
@@ -248,8 +253,10 @@ def write_aggregate(job_id: str, doc: dict[str, Any],
     local.write_bytes(body)
     out = {"local": str(local), "bytes": len(body), "b2_key": None, "b2_url": None}
 
-    if not b2_enabled():
-        logger.info("B2 no configurado: agregado solo en %s", local)
+    if use_b2 is None:
+        use_b2 = b2_enabled()
+    if not (use_b2 and b2_enabled()):
+        logger.info("sin B2: agregado solo en %s", local)
         return out
 
     s3, bucket = _s3()
@@ -262,9 +269,12 @@ def write_aggregate(job_id: str, doc: dict[str, Any],
     return out
 
 
-def read_aggregate(job_id: str, *, local_dir: str | Path = "runs") -> dict[str, Any]:
+def read_aggregate(job_id: str, *, local_dir: str | Path = "runs",
+                   use_b2: bool | None = None) -> dict[str, Any]:
     """Lee el agregado, de B2 si se puede y si no de local."""
-    if b2_enabled():
+    if use_b2 is None:
+        use_b2 = b2_enabled()
+    if use_b2 and b2_enabled():
         s3, bucket = _s3()
         try:
             return json.loads(s3.get_object(Bucket=bucket, Key=prov_key(job_id))
@@ -307,7 +317,8 @@ def _manifest_for_final(job_id: str, mp4: Path, doc: dict[str, Any]) -> Manifest
 def approve(job_id: str, final_mp4: str | Path, *,
             doc: dict[str, Any] | None = None,
             retain_days: int = RETAIN_DAYS,
-            local_dir: str | Path = "runs") -> dict[str, Any]:
+            local_dir: str | Path = "runs",
+            use_b2: bool | None = None) -> dict[str, Any]:
     """Embebe el manifest en el mp4, lo sube con Object Lock y bloquea su manifest.
 
     Devuelve un dict con las claves de B2, el modo/fecha de retencion y el
@@ -316,7 +327,7 @@ def approve(job_id: str, final_mp4: str | Path, *,
     final_mp4 = Path(final_mp4)
     if not final_mp4.is_file():
         raise FileNotFoundError(f"no existe el master: {final_mp4}")
-    doc = doc or read_aggregate(job_id, local_dir=local_dir)
+    doc = doc or read_aggregate(job_id, local_dir=local_dir, use_b2=use_b2)
 
     from genblaze_core.media import Mp4Handler, SmartEmbedder
 
@@ -349,8 +360,10 @@ def approve(job_id: str, final_mp4: str | Path, *,
         "lock": None,
         "keys": {},
     }
-    if not b2_enabled():
-        logger.info("B2 no configurado: aprobado solo en local (%s)", out_path)
+    if use_b2 is None:
+        use_b2 = b2_enabled()
+    if not (use_b2 and b2_enabled()):
+        logger.info("sin B2: aprobado solo en local (%s)", out_path)
         return result
 
     s3, bucket = _s3()
@@ -401,7 +414,7 @@ def approve(job_id: str, final_mp4: str | Path, *,
     doc["approved"] = {k: result[k] for k in ("keys", "lock", "canonical_hash",
                                               "embed_method", "embed_verified",
                                               "master_sha256")}
-    write_aggregate(job_id, doc, local_dir=local_dir)
+    write_aggregate(job_id, doc, local_dir=local_dir, use_b2=use_b2)
     logger.info("aprobado: s3://%s/%s con lock %s hasta %s",
                 bucket, key, LOCK_MODE, retain_until.isoformat())
     return result

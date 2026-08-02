@@ -27,6 +27,7 @@ import tempfile
 import time
 import urllib.parse
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -169,6 +170,46 @@ def plan_scenes_llm(brief: str, n: int = DEFAULT_SCENES, *,
 
 
 # --- Utilidades --------------------------------------------------------------
+
+def scene_to_spec(scene: Scene) -> dict[str, Any]:
+    return {"n": scene.n, "title": scene.title,
+            "keyframe_prompt": scene.keyframe_prompt,
+            "voiceover": scene.voiceover, "clip_prompt": scene.clip_prompt,
+            "seconds": scene.seconds}
+
+
+def scene_from_spec(spec: dict[str, Any]) -> Scene:
+    return Scene(n=int(spec["n"]), title=str(spec.get("title", "")),
+                 keyframe_prompt=str(spec.get("keyframe_prompt", "")),
+                 voiceover=str(spec.get("voiceover", "")),
+                 clip_prompt=str(spec.get("clip_prompt", "")),
+                 seconds=float(spec.get("seconds", DEFAULT_SECONDS)))
+
+
+def _call_on_scene(on_scene, n: int, path: str, meta: dict[str, Any]) -> None:
+    """Llama al callback con la aridad que acepte.
+
+    El backend (`server/jobs.py`) espera `(n, path, meta)`; los tests y el CLI
+    usan `(path)`. En vez de imponer una firma se introspecciona la suya, que
+    es una linea y evita un adaptador en el otro lado.
+    """
+    import inspect
+
+    try:
+        params = inspect.signature(on_scene).parameters
+        positional = [q for q in params.values()
+                      if q.kind in (q.POSITIONAL_ONLY, q.POSITIONAL_OR_KEYWORD)]
+        n_args = 3 if any(q.kind == q.VAR_POSITIONAL for q in params.values()) \
+            else len(positional)
+    except (TypeError, ValueError):
+        n_args = 1
+    if n_args >= 3:
+        on_scene(n, path, meta)
+    elif n_args == 2:
+        on_scene(n, path)
+    else:
+        on_scene(path)
+
 
 def media_workdir(job_id: str, slug: str) -> Path:
     """Directorio de trabajo de una escena, SIEMPRE bajo el temp del sistema.
@@ -341,6 +382,7 @@ def run_job(
             local_path=str(scene_path), elapsed_ms=elapsed,
         )
         record.duration_sec = scene.seconds
+        record.spec = scene_to_spec(scene)
         record.chain_parent_run_id = records[-1].run_id if records else None
         records.append(record)
         result.scene_paths.append(str(scene_path))
@@ -365,7 +407,11 @@ def run_job(
         # EL CALLBACK. Antes de seguir con la siguiente escena.
         if on_scene is not None:
             try:
-                on_scene(str(scene_path))
+                _call_on_scene(on_scene, scene.n, str(scene_path), {
+                    "title": scene.title, "ms": elapsed,
+                    "iterations": record.iterations, "judge": record.judge,
+                    "fallbacks": record.fallbacks, "run_id": record.run_id,
+                })
             except Exception as exc:  # noqa: BLE001
                 logger.exception("on_scene fallo para la escena %d: %s", scene.n, exc)
 
@@ -385,7 +431,8 @@ def run_job(
         "video_params": video_params(result.scene_paths[0]) if result.scene_paths else None,
     })
     result.aggregate = doc
-    result.aggregate_written = M.write_aggregate(job_id, doc, local_dir=out_dir)
+    result.aggregate_written = M.write_aggregate(job_id, doc, local_dir=out_dir,
+                                                use_b2=use_b2)
 
     logger.info("job %s terminado en %d ms (primera escena a los %d ms); "
                 "agregado -> %s", job_id, result.elapsed_ms, result.first_scene_ms,
@@ -395,6 +442,104 @@ def run_job(
           manifest=result.aggregate_written.get("b2_url"),
           failovers=doc.get("failovers"))
     return result
+
+
+# --- Refinado de UNA escena (reject en caliente) ------------------------------
+
+def refine_scene(job_id: str, n: int, *, note: str | None = None,
+                 out_dir: str | Path = "runs", mock: bool | None = None,
+                 use_b2: bool | None = None, max_iterations: int = 2,
+                 threshold: float | None = None, take: int | None = None,
+                 on_event: Callable[[dict[str, Any]], None] | None = None) -> str:
+    """Relanza UNA escena con la nota del revisor y devuelve la ruta de la toma.
+
+    Es el camino de "rechazo en caliente" del guion: Ana rechaza la escena 2 en
+    el segundo 15 con "logo ilegible" y la nota entra en el prompt del keyframe
+    de la nueva pasada del `AgentLoop`. El run nuevo cuelga por `parent_run_id`
+    del run de la toma rechazada, asi que el manifest deja la cadena
+    toma-mala -> toma-buena.
+
+    Reconstruye la escena desde el manifest agregado del job: por eso
+    `SceneRecord.spec` guarda los tres prompts.
+    """
+    out_dir = Path(out_dir)
+    if use_b2 is None:
+        use_b2 = M.b2_enabled()
+    doc = M.read_aggregate(job_id, local_dir=out_dir, use_b2=use_b2)
+    entry = next((sc for sc in doc.get("scenes", []) if int(sc["n"]) == int(n)), None)
+    if entry is None:
+        raise KeyError(f"el job {job_id} no tiene escena {n}")
+    spec = entry.get("spec") or {}
+    if not spec:
+        raise KeyError(f"la escena {n} de {job_id} no guardo su spec "
+                       f"(job generado con una version anterior del runner)")
+
+    scene = scene_from_spec(spec)
+    if note:
+        # La nota del revisor manda por encima del juez: va literal al prompt.
+        scene = Scene(n=scene.n, title=scene.title,
+                      keyframe_prompt=(f"{scene.keyframe_prompt}. Reviewer rejected the "
+                                       f"previous take: {note.strip()}. Fix exactly that."),
+                      voiceover=scene.voiceover, clip_prompt=scene.clip_prompt,
+                      seconds=scene.seconds)
+
+    brief = doc.get("brief", "")
+    job_dir = out_dir / job_id
+    if take is None:
+        take = 1 + len(list(job_dir.glob(f"scene-{n}-take*.mp4")))
+    workdir = media_workdir(job_id, f"{scene.slug}-take{take}")
+
+    logger.info("refinando %s escena %d (toma %d) con nota=%r", job_id, n, take, note)
+    _emit(on_event, "scene_refine_started", job_id=job_id, scene=n, take=take, note=note)
+
+    loop, fe = build_scene_agent(scene, job_id, brief, workdir=workdir, mock=mock,
+                                 threshold=threshold, max_iterations=max_iterations,
+                                 cache_dir=None)   # sin cache: queremos otra toma
+    sink = M.scene_sink(job_id, n) if use_b2 else None
+    try:
+        kwargs: dict[str, Any] = {"raise_on_failure": True}
+        if sink is not None:
+            kwargs.update(sink=sink, _owns_sink=False)
+        agent_result = loop.run(**kwargs)
+    finally:
+        if sink is not None:
+            sink.close()
+
+    asset = composite_asset(agent_result.final)
+    if asset is None:
+        raise RuntimeError(f"el refinado de la escena {n} no produjo mp4")
+    comp_step = next((st for st in reversed(agent_result.final.run.steps)
+                      if st.metadata.get("role") == "composite"), None)
+    raw = _local_media(asset, workdir, workdir / "composite.mp4", step=comp_step)
+    dest = normalize_scene(raw, job_dir / f"scene-{n}-take{take}.mp4",
+                           label=DRAFT_WATERMARK)
+
+    verdict = fe.last()
+    record = M.scene_record_from_result(
+        n, scene.title, agent_result,
+        judge=verdict.as_dict() if verdict else {}, local_path=str(dest))
+    record.spec = scene_to_spec(scene)
+    record.chain_parent_run_id = entry.get("run_id")
+
+    # El agregado registra la toma: la evidencia del loop de refinado.
+    doc.setdefault("refinements", []).append({
+        "scene": n, "take": take, "note": note,
+        "run_id": record.run_id, "rejected_run_id": entry.get("run_id"),
+        "iterations": record.iterations, "judge": record.judge,
+        "path": str(dest), "at": datetime.now(timezone.utc).isoformat(),
+    })
+    # La escena pasa a ser la toma nueva; la anterior queda en `refinements`.
+    for i, sc in enumerate(doc["scenes"]):
+        if int(sc["n"]) == int(n):
+            doc["scenes"][i] = record.as_dict()
+    doc["refined_scenes"] = sorted({*doc.get("refined_scenes", []), n})
+    M.write_aggregate(job_id, doc, local_dir=out_dir, use_b2=use_b2)
+
+    logger.info("escena %d refinada -> %s (juez=%.2f)", n, dest,
+                verdict.score if verdict else -1.0)
+    _emit(on_event, "scene_refined", job_id=job_id, scene=n, take=take,
+          path=str(dest), iterations=record.iterations, judge=record.judge)
+    return str(dest)
 
 
 # --- CLI ---------------------------------------------------------------------
@@ -436,6 +581,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="plan de escenas con NIM chat en vez de la plantilla")
     ap.add_argument("--approve", action="store_true",
                     help="al terminar: embeber manifest + subir con Object Lock")
+    ap.add_argument("--refine", type=int, metavar="N",
+                    help="relanza SOLO la escena N de un job ya generado")
+    ap.add_argument("--note", default=None,
+                    help="nota del revisor para --refine (entra en el prompt)")
     ap.add_argument("--verify", action="store_true",
                     help="al terminar: verify --fetch sobre el master aprobado")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -458,6 +607,13 @@ def main(argv: list[str] | None = None) -> int:
 
     mock = True if args.mock else (False if args.real else None)
     threshold = 0.0 if args.no_judge else args.threshold
+
+    if args.refine:
+        path = refine_scene(args.job, args.refine, note=args.note, out_dir=args.out,
+                            mock=mock, use_b2=False if args.no_b2 else None,
+                            max_iterations=args.max_iterations, threshold=threshold)
+        print(f"escena {args.refine} refinada -> {path}")
+        return 0
 
     try:
         result = run_job(
@@ -495,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.approve and result.final_mp4:
         info = M.approve(args.job, result.final_mp4, doc=result.aggregate,
-                         local_dir=args.out)
+                         local_dir=args.out, use_b2=not args.no_b2)
         print(f"  aprobado: {info['keys'].get('master') or info['local_master']} "
               f"lock={info['lock']} embed={info['embed_method']} "
               f"verificado={info['embed_verified']}")
@@ -580,6 +736,27 @@ def demo() -> None:
         fb = res2.failovers
         assert fb and fb[0]["from"] == "pixverse-v5.6" and fb[0]["to"] == "seedance-2-0", fb
         assert res2.scenes[0].steps[2]["model"] == "seedance-2-0"
+
+        # --- rechazo en caliente: refinado de UNA escena --------------------
+        take = refine_scene("demojob", 2, note="el logo no se lee",
+                            out_dir=tmp, mock=True, use_b2=False, max_iterations=1)
+        assert Path(take).is_file() and take.endswith("scene-2-take1.mp4"), take
+        assert video_params(take) == video_params(seen[0]), \
+            "la toma refinada tiene que ser concatenable con el resto"
+        doc2 = json.loads(Path(res.aggregate_written["local"]).read_text())
+        ref = doc2["refinements"][0]
+        assert ref["scene"] == 2 and ref["note"] == "el logo no se lee"
+        assert ref["rejected_run_id"] == res.scenes[1].run_id, ref
+        assert doc2["refined_scenes"] == [2]
+        # La escena 2 del agregado ya apunta a la toma nueva.
+        assert doc2["scenes"][1]["local_path"] == take
+
+        # on_scene con la firma de 3 argumentos del backend.
+        got: list[tuple] = []
+        run_job("demojob-arity", "brief", on_scene=lambda n, p, m: got.append((n, p, m)),
+                scenes=plan[:1], mock=True, use_b2=False, out_dir=tmp,
+                cache_dir=None, max_iterations=1)
+        assert len(got) == 1 and got[0][0] == 1 and got[0][2]["title"] == "apertura", got
     finally:
         for k, v in prev.items():
             os.environ.pop(k, None)
