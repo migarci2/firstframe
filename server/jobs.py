@@ -457,13 +457,35 @@ def _refine_safe(job_id: str, scene: int | None, note: str | None) -> None:
 
 
 def _refine_scene(job_id: str, n: int, note: str | None, take: int) -> Path:
-    """Relanza una escena. Usa `pipeline.runner.refine_scene` si W1 lo expone."""
+    """Relanza una escena. Usa `pipeline.runner.refine_scene` si W1 lo expone.
+
+    Sobre el juez de vision en el rechazo — medido, no supuesto:
+    `refine_scene()` no recibe threshold, asi que `pipeline/scenes.py:556` lo lee del
+    ENTORNO. Con `JUDGE_THRESHOLD=0` (lo que pide la demo para que el primer fotograma
+    salga a ~5 s) el juez queda apagado **tambien aqui**: `FrameEvaluator.score`
+    cortocircuita con "juez desactivado (threshold=0)" y no llama a NIM.
+    Para verlo trabajar de verdad en el rechazo hay que pedirlo aparte:
+
+        JUDGE_THRESHOLD_REJECT=0.7   -> el rechazo llama al juez de vision real
+        REFINE_MAX_ITERATIONS=1      -> una sola pasada (cada una cuesta ~50 s medidos)
+
+    Sin eso el rechazo sigue siendo real (run nuevo encadenado por parent_run_id, la
+    nota entra en el prompt, la toma mala baja a rejected/) pero el `judge_score` que
+    pinta la UI es el del revisor, no el del modelo de vision.
+    """
     try:
         from pipeline.runner import refine_scene  # type: ignore
 
-        return Path(refine_scene(job_id, n, note=note))
-    except Exception:
-        pass
+        kw: dict = {"max_iterations": int(os.getenv("REFINE_MAX_ITERATIONS", "1"))}
+        thr = os.getenv("JUDGE_THRESHOLD_REJECT")
+        if thr is not None:
+            kw["threshold"] = float(thr)
+        return Path(refine_scene(job_id, n, note=note, **kw))
+    except Exception as e:
+        # Sin esta traza el fallback pinta una carta de ajuste de ffmpeg y nadie se
+        # entera de por que: en camara parece que el refinado "funciono".
+        print(f"[jobs] refine real fallo en {job_id}/escena {n} ({e!r}); "
+              f"cayendo al clip de ffmpeg")
     out = WORK / job_id / f"scene-{n}-take{take}.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
     txt = (note or "refinado").replace("'", "").replace(":", " ")[:40]
