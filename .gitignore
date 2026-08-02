@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 .next/
 dist/
+.venv/
+__pycache__/
