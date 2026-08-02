@@ -207,7 +207,12 @@ Devuelve el `provenance/{id}/manifest.json` tal cual (JSON), leído de B2.
 ### `GET /api/download/{job_id}`
 ```jsonc
 200 → { "url": "https://s3.eu-central-003.backblazeb2.com/genblaze-review-.../approved/...?X-Amz-..." , "expires_in": 3600 }
+404 → { "error": "no such job" }
+409 → { "error": "job not approved", "job_status": "in_review" }
 ```
+El presign es una firma **local** (0 transacciones de B2) y por eso no se comprueba con
+`head_object`: con la cuota agotada eso hacia que un job aprobado contestara
+"not approved yet". La fuente de verdad del estado es la DB.
 Presign **AWS4 path-style** (obligatorio: los buckets privados de B2 en navegador fallan
 con virtual-host style, SDK issue #246).
 

@@ -271,11 +271,18 @@ def download(job_id: str):
     if _stub():
         return {"url": f"https://s3.eu-central-003.backblazeb2.com/genblaze-review-migarci2/"
                        f"approved/{job_id}/final.mp4?X-Amz-Signature=stub", "expires_in": 3600}
-    from server import b2
+    from server import b2, jobs
 
+    # El presign es una FIRMA LOCAL: cuesta 0 transacciones. Antes esto se colgaba de
+    # un b2.head(), que es Class B: con la cuota diaria agotada head() devuelve None y
+    # la descarga de un job REALMENTE aprobado respondia "not approved yet". La fuente
+    # de verdad de si esta aprobado es la DB, no una lectura a B2.
+    j = jobs.public_job(job_id)
+    if j is None:
+        return _err(404, "no such job")
+    if j["status"] != "approved":
+        return _err(409, "job not approved", job_status=j["status"])
     key = f"approved/{job_id}/final.mp4"
-    if not b2.head(key):
-        return _err(404, "not approved yet")
     return {"url": b2.presign_path_style(key, expires=3600), "expires_in": 3600}
 
 
