@@ -39,7 +39,7 @@ SEG_SECONDS = float(os.getenv("HLS_SEG_SECONDS", "2"))
 
 # Parametros comunes de §2 del plan. Todo mp4 que sale del pipeline pasa por aqui.
 VIDEO_ARGS = [
-    "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "main",
+    "-c:v", "libx264", "-preset", "ultrafast", "-profile:v", "main",
     "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,"
            "pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=24,format=yuv420p",
     "-g", "48", "-keyint_min", "48", "-sc_threshold", "0",

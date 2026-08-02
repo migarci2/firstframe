@@ -270,4 +270,22 @@ Segmentación: `-f hls -hls_time 4 -hls_list_size 0 -hls_flags append_list+indep
 | `B2_KEY_ID`, `B2_APP_KEY`, `B2_REGION`, `B2_BUCKET` | — | credenciales (de `.env`) |
 | `B2_WEBHOOK_SECRET` | `firstframe-dev-secret` | secreto HMAC de las Event Notifications |
 | `FIRSTFRAME_DB` | `data/firstframe.db` | ruta de la sqlite |
+| `FIRSTFRAME_HLS` | `data/hls` | copia local de los segmentos (fallback del streamer) |
+| `FIRSTFRAME_WORK` | `data/work` | mp4 de escena, final.mp4, manifest local |
+| `HLS_SEG_SECONDS` | `2` | duración del segmento HLS (= suelo del "first frame") |
+| `SCENE_COUNT` | `6` | escenas por defecto si el POST no lo dice |
+| `MAX_ITERATIONS` | `1` | iteraciones del AgentLoop por escena (acota la latencia) |
+| `JUDGE_THRESHOLD` | *(sin poner)* | `0` apaga el juez de visión. **Ponerlo a 0 para la demo en vivo**: el juez de NIM free tier timeoutea a los ~30 s por escena y con él el first frame se va a 70 s |
+| `FORCE_STUB_RUNNER` | `0` | `1` ignora `pipeline.runner` y genera escenas con ffmpeg |
 | `PORT` | `8000` | puerto de uvicorn |
+
+## Autocomprobaciones (cada pieza trae la suya)
+```bash
+.venv/bin/python -m server.db          # esquema + idempotencia por event_id
+.venv/bin/python -m server.events      # firma HMAC (6 casos malos) + 200 webhooks < 3 s
+.venv/bin/python -m server.assembler   # 2 escenas -> playlist creciente -> ENDLIST -> master
+.venv/bin/python -m server.streamer    # rangos, path traversal, 404-retry
+set -a && . ./.env && set +a
+.venv/bin/python -m server.b2          # put/get/range/presign/lock + B2 rechaza el borrado
+.venv/bin/python -m server.jobs        # end-to-end: crear -> escenas -> approve -> lock -> verify
+```

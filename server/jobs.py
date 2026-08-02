@@ -159,9 +159,10 @@ def _run_job(job_id: str, brief: str, scene_count: int, t0: float) -> None:
                                        "job": public_job(job_id)})
 
     runner = _load_runner()
-    print(f"[jobs] {job_id} runner={runner.__name__ if runner else 'stub'}")
+    print(f"[jobs] {job_id} runner={'pipeline.runner' if runner else 'stub'}")
     if runner is not None:
-        result = runner(job_id, brief, scenes=scene_count, on_scene=on_scene, on_event=on_event)
+        result = _call_runner(runner, job_id, brief, scene_count, on_scene, on_event)
+        result = _normalize_result(result)
     else:
         result = _stub_runner(job_id, brief, scene_count, on_scene, on_event)
 
@@ -186,6 +187,84 @@ def _load_runner():
         print(f"[jobs] pipeline.runner no disponible ({e.__class__.__name__}: {e}); "
               f"usando runner stub con ffmpeg")
         return None
+
+
+def _call_runner(runner, job_id: str, brief: str, scene_count: int, on_scene, on_event):
+    """Adaptador de firmas: el runner real de W1 no acabo con la firma del contrato.
+
+    `pipeline.runner.run_job` llama a `on_scene(path)` con UN argumento y a
+    `on_event({"type": ..., ...})` con UN dict, y el numero de escenas es `n_scenes`.
+    En vez de bloquear a W1 con un cambio de firma a estas horas, aqui se introspecciona
+    la firma y se adapta. Funciona con las dos formas (1 arg o 3).
+    """
+    import inspect
+
+    counter = {"n": 0}
+
+    def scene_cb(*args, **kw):
+        # forma del contrato: (n, path, meta)
+        if args and isinstance(args[0], int):
+            return on_scene(args[0], args[1], args[2] if len(args) > 2 else kw.get("meta"))
+        # forma real de W1: (path)
+        counter["n"] += 1
+        path = args[0] if args else kw.get("path")
+        return on_scene(counter["n"], str(path), {"title": None})
+
+    def event_cb(*args, **kw):
+        if args and isinstance(args[0], dict):          # forma de W1
+            d = dict(args[0])
+            kind = d.pop("type", None) or d.pop("kind", "provider_call")
+        elif args:                                       # forma del contrato
+            kind, d = args[0], dict(args[1] if len(args) > 1 else {})
+        else:
+            return None
+        d.setdefault("detail", d.get("path") or d.get("model") or "")
+        if kind in ("scene_started", "scene_ready", "job_started", "job_complete"):
+            kind_out = "provider_call"
+        elif kind == "scene_refined":
+            kind_out = "judge_score"
+        else:
+            kind_out = kind
+        if kind == "scene_refined" and isinstance(d.get("judge"), dict):
+            d["score"] = d["judge"].get("score")
+        return on_event(kind_out, d)
+
+    params = set(inspect.signature(runner).parameters)
+    kwargs = {"on_scene": scene_cb, "on_event": event_cb}
+    if "n_scenes" in params:
+        kwargs["n_scenes"] = scene_count
+    elif "scenes" in params:
+        kwargs["scenes"] = scene_count
+    if "mock" in params and os.getenv("DEMO_MODE", "mock") == "mock":
+        kwargs["mock"] = True
+    # El juez de vision de NIM (free tier) timeoutea a los ~30 s y degrada a 0.50, que
+    # esta por debajo del threshold -> otra iteracion -> otros 30 s. Con eso el first
+    # frame se va a 70 s. Se acotan las iteraciones y se permite apagar el juez
+    # (JUDGE_THRESHOLD=0) desde el entorno sin tocar el pipeline.
+    if "max_iterations" in params:
+        kwargs["max_iterations"] = int(os.getenv("MAX_ITERATIONS", "1"))
+    if "threshold" in params and os.getenv("JUDGE_THRESHOLD") is not None:
+        kwargs["threshold"] = float(os.environ["JUDGE_THRESHOLD"])
+    return runner(job_id, brief, **kwargs)
+
+
+def _normalize_result(result) -> dict:
+    """El runner devuelve un dataclass (JobResult); aqui solo interesan unas claves."""
+    if isinstance(result, dict) or result is None:
+        return result or {}
+    out = {}
+    for k in ("final_mp4", "elapsed_ms", "first_scene_ms", "provider_mode", "scene_paths"):
+        if hasattr(result, k):
+            out[k] = getattr(result, k)
+    written = getattr(result, "aggregate_written", None) or {}
+    if isinstance(written, dict):
+        out["manifest_key"] = written.get("b2_key") or written.get("key")
+        out["manifest_url"] = written.get("b2_url")
+        out["manifest_local"] = written.get("local")
+    agg = getattr(result, "aggregate", None)
+    if isinstance(agg, dict):
+        out["failovers"] = agg.get("failovers")
+    return out
 
 
 # ------------------------------------------------------------------ runner stub
@@ -496,6 +575,21 @@ def verify(job_id: str) -> dict | None:
 
 
 # ------------------------------------------------------------------ arranque
+def warm_runner() -> None:
+    """Precarga `pipeline.runner` en un thread al arrancar.
+
+    Importar genblaze + sus 15 conectores tarda ~10-20 s. Si eso pasa dentro del primer
+    job, se lo come entero el cronometro de 'first frame'. Se paga una vez al arrancar.
+    """
+    def _warm():
+        t = time.time()
+        r = _load_runner()
+        if r is not None:
+            print(f"[jobs] pipeline.runner precargado en {time.time() - t:.1f} s")
+
+    threading.Thread(target=_warm, daemon=True, name="warm-runner").start()
+
+
 def resume_orphans() -> None:
     """Un job en 'rendering' tras un reinicio esta muerto: no dejarlo mintiendo en la UI."""
     from server import db

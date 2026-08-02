@@ -44,6 +44,7 @@ def _startup() -> None:
 
     db.init()
     jobs.resume_orphans()
+    jobs.warm_runner()
     events.start(app)
 
 
@@ -325,9 +326,6 @@ async def _json(req: Request) -> dict:
 
 # ---------------------------------------------------------------- estaticos
 # Se monta al final para no tapar /api ni /stream.
-if WEB_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
-else:  # el frontend aun no existe (W3 en marcha)
-    @app.get("/")
-    def _placeholder():
-        return {"ok": True, "note": "web/ todavia no existe; API viva en /api/health"}
+# check_dir=False: web/ lo escribe otro workstream y puede no existir todavia al
+# arrancar; sin esto el servidor entero se niega a levantar por un directorio que falta.
+app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True, check_dir=False), name="web")

@@ -1,5 +1,9 @@
+# Backend FirstFrame. La imagen de deploy instala esto (ver Dockerfile).
 fastapi>=0.110
 uvicorn[standard]>=0.27
 boto3>=1.34
-python-dotenv>=1.0
+
+# genblaze 0.4.5 arrastra genblaze-core y los conectores; el pipeline importa
+# `genblaze` y `genblaze_core`, y el sink de B2 vive en genblaze-s3.
 genblaze==0.4.5
+genblaze-s3>=0.3.6
