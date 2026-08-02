@@ -60,6 +60,8 @@ function fmtTC(sec) {
   return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
+function segLabel(n) { return n + (n === 1 ? ' segmento en B2' : ' segmentos en B2'); }
+
 function jobById(id) {
   for (var i = 0; i < S.jobs.length; i++) if (S.jobs[i].id === id) return S.jobs[i];
   return null;
@@ -106,7 +108,10 @@ function toast(kind, head, bodyNode, ttl) {
   var b = el('div', 'toast-b');
   if (typeof bodyNode === 'string') b.textContent = bodyNode; else b.appendChild(bodyNode);
   t.appendChild(b);
-  $('toasts').appendChild(t);
+  var box = $('toasts');
+  box.appendChild(t);
+  // Como mucho 3 en pantalla: un muro de toasts tapa el vídeo.
+  while (box.children.length > 3) box.removeChild(box.firstChild);
   setTimeout(function () {
     t.classList.add('out');
     setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 280);
@@ -218,7 +223,7 @@ var Player = {
         var n = data && data.details && data.details.fragments ? data.details.fragments.length : 0;
         if (self.jobId === S.sel) {
           S.segs[self.jobId] = Math.max(S.segs[self.jobId] || 0, n);
-          $('seg-counter').textContent = S.segs[self.jobId] + ' segmentos en B2';
+          $('seg-counter').textContent = segLabel(S.segs[self.jobId]);
         }
       });
 
@@ -399,8 +404,12 @@ function renderScenes() {
   var badge = $('live-badge');
   if (isLive(job)) {
     badge.hidden = false;
-    $('live-text').textContent = 'LIVE — generando escena ' + currentScene(job) +
-                                 ' de ' + (job.scene_count || scenes.length);
+    var pend = scenes.filter(function (s) { return s.status !== 'ready'; }).length;
+    // Tras un rechazo el job vuelve a "rendering" con todas las escenas ya
+    // listas: lo que se está generando es la toma refinada, no una escena nueva.
+    $('live-text').textContent = pend === 0
+      ? 'LIVE — refinando la toma rechazada'
+      : 'LIVE — generando escena ' + currentScene(job) + ' de ' + (job.scene_count || scenes.length);
   } else {
     badge.hidden = true;
   }
@@ -440,10 +449,12 @@ function renderReview() {
   } else {
     lock.hidden = true;
     hint.hidden = false;
+    hint.className = 'review-hint' + (job.status === 'failed' ? ' err' : '');
     hint.textContent = reviewable
       ? 'Reject relanza la escena con el AgentLoop; Approve sube el final con Object Lock.'
       : (isLive(job) ? 'Render en curso — puedes ver ya el segundo 0:00 mientras se genera.'
                      : 'Job en estado "' + job.status + '"' + (job.error ? ': ' + job.error : '') + '.');
+    hint.title = hint.textContent;
   }
 }
 
@@ -619,7 +630,7 @@ function select(id, opts) {
   $('stage-title').hidden = false;
   $('stage-jobid').textContent = job.id;
   $('stage-jobname').textContent = job.title || job.brief || '';
-  $('seg-counter').textContent = (S.segs[id] || 0) + ' segmentos en B2';
+  $('seg-counter').textContent = segLabel(S.segs[id] || 0);
 
   if (changed || opts.force) Player.load(job);
 
@@ -740,7 +751,7 @@ function handleEvent(type, d) {
 
     case 'segment_landed':
       S.segs[jid] = (S.segs[jid] || 0) + 1;
-      if (jid === S.sel) $('seg-counter').textContent = S.segs[jid] + ' segmentos en B2';
+      if (jid === S.sel) $('seg-counter').textContent = segLabel(S.segs[jid]);
       pushFeed('segment_landed', jid, 'b2:ObjectCreated · ' + (d.key || ('seq ' + d.seq)));
       return;
 
