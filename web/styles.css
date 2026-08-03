@@ -837,8 +837,11 @@ body.no-rail .p-inspector { display: none; }
  * trabajo que hay, con su fecha y su estado, como cualquier herramienta que
  * se abre todos los días. Mismo lienzo, mismos paneles, sin animación. */
 
-body.home .shell { display: none; }
-body.home .home  { display: block; }
+/* La clase va en <body>, así que NO puede llamarse igual que la del <main>:
+ * `.home { display:none }` casaba también con el propio body y apagaba la
+ * página entera — pantalla en blanco, sin un solo error de consola. */
+body.at-home .shell { display: none; }
+body.at-home .home  { display: block; }
 .home { display: none; height: calc(100vh - 48px); overflow-y: auto; }
 .home-in { max-width: 1120px; margin: 0 auto; padding: 44px 32px 64px; }
 
@@ -936,8 +939,8 @@ body.home .home  { display: block; }
   font-size: 13px; letter-spacing: -.006em;
 }
 .crumb-root:hover { color: var(--white); }
-body.home .crumb-p, body.home .crumb-j, body.home .crumb-s { display: none; }
-body.home .crumb-root { color: var(--white); font-weight: 550; }
+body.at-home .crumb-p, body.at-home .crumb-j, body.at-home .crumb-s { display: none; }
+body.at-home .crumb-root { color: var(--white); font-weight: 550; }
 
 /* ─────────────── herramientas del spot abierto ─────────────── */
 .spottools { display: flex; align-items: center; gap: 14px; margin-top: 12px; flex-wrap: wrap; }

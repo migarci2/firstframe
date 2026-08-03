@@ -367,7 +367,7 @@ function showHome() {
   S.view = 'home';
   S.sel = null;
   Player.teardown();
-  document.body.classList.add('home');
+  document.body.classList.add('at-home');
   $('view-home').hidden = false;
   $('changes').hidden = true;
   $('briefedit').hidden = true;
@@ -381,7 +381,7 @@ function openProject(name, opts) {
   S.project = name;
   S.folded[name] = false;
   S.view = 'compose';
-  document.body.classList.remove('home');
+  document.body.classList.remove('at-home');
   $('view-home').hidden = true;
   setHash('p/' + encodeURIComponent(name));
 
