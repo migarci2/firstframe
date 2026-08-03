@@ -61,7 +61,7 @@ function buildDeck() {
     var p = document.createElement('p');  p.textContent = '“' + s.b + '”'; m.appendChild(p);
     var f = document.createElement('div');
     f.className = 'foot';
-    var sp = document.createElement('span'); sp.textContent = s.e; f.appendChild(sp);
+    f.appendChild(document.createTextNode(s.e));
     var b = document.createElement('b'); b.textContent = s.ms; f.appendChild(b);
     m.appendChild(f);
     c.appendChild(m);
@@ -176,7 +176,7 @@ function drawPortal() {
   // La imagen se asienta de un ligero sobreescalado a 1.
   var pImg = clamp01(p / 0.85);
   els.img.style.transform = 'scale(' + lerp(1.12, 1, pImg) + ')';
-  els.duo.style.opacity = String(lerp(0, 0.14, clamp01(p / 0.6)));
+  els.duo.style.opacity = String(lerp(0, 0.34, clamp01(p / 0.6)));
 
   // Crece Y aprieta a la vez: es lo que hace que se lea como un título que se
   // abre y no como un zoom. Los extremos viajan media anchura hacia fuera.
