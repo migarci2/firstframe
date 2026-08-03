@@ -1,6 +1,8 @@
 # GUION del vídeo — FirstFrame (3:00)
 
 Guion **ejecutable**: cada tramo dice qué se ve, qué se dice, qué se pulsa y cuánto dura.
+**La narración va en inglés** (jurado de Backblaze, submission en inglés); las acotaciones
+siguen en español porque son para ti, no para la cámara.
 Nada de improvisar delante de la cámara.
 
 > **ACTUALIZADO 2026-08-03 18:55.** Se graba contra **producción**, no contra localhost:
@@ -62,7 +64,7 @@ dos extremos estás.
 | | |
 |---|---|
 | **En pantalla** | Pantalla partida. Izquierda: terminal con una barra de render al 40 % y un cronómetro subiendo. Derecha: tarjeta «Ana Ruiz · productora · 40 spots/semana». Rótulo grande: **«3–5 min por render · 30 % se rechazan · el rechazo llega al final»**. |
-| **Se dice** | «Ana genera cuarenta spots a la semana con IA. Rechaza uno de cada tres. El problema no es generar: es que para rechazar en el segundo diez tiene que esperar tres minutos a que termine el render entero.» |
+| **Se dice (EN)** | «Ana ships forty AI-generated product spots a week. She rejects about a third of them. Generating isn't the problem — the problem is that to reject a shot at second ten, she has to wait three minutes for the whole render to finish.» |
 | **Cómo se provoca** | Plano montado, no es la app. Puedes usar cualquier terminal; no hace falta que sea real. |
 | **Duración** | 18 s |
 
@@ -73,7 +75,7 @@ dos extremos estás.
 | | |
 |---|---|
 | **En pantalla** | La app en la URL viva, **con la barra de direcciones visible**. Pegas el brief, eliges 4 escenas, pulsas `New spot`. Aparece el job con badge rojo **`LIVE — generando escena 2 de 4`**, el player arranca con la cabecera `FirstFrame · LIVE`, y a los ~5 s entra la escena 1. El **FEED EN VIVO** de la derecha se llena de `SEGMENT_LANDED · b2:ObjectCreated`. Abajo, el panel grande: **`PRIMER FOTOGRAMA 5.1 s` vs `RENDER TOTAL 24 s` · `4.7× ANTES EN PANTALLA`**. |
-| **Se dice** | «Pego el brief y le doy a New spot. Cada escena que se genera se transcodifica, se corta en segmentos HLS y **cada segmento se sube a Backblaze B2 como un objeto independiente**, regenerando la playlist. A los cinco segundos Ana ya está viendo el segundo cero mientras la escena cuatro todavía se está generando. Cinco segundos contra veinticuatro: cuatro veces y media antes en pantalla.» |
+| **Se dice (EN)** | «I paste the brief and hit New spot. Every scene that finishes is transcoded, cut into HLS segments, and **each segment lands in Backblaze B2 as its own object**, with the playlist regenerated behind it. Within seconds she's watching second zero while the last scene is still being generated. That's roughly four times earlier on screen than waiting for the render.» |
 | **Comandos / clics** | 1) clic en el campo Brief, pegar: `spot de 15 s para la zapatilla Aeron: amanecer en una playa vacía, plano detalle del logo, cierre con claim`. 2) desplegable **ESCENAS → 4**. 3) clic en **New spot**. 4) no toques nada más: deja correr. |
 | **Tiempos reales** | playlist servible a **~1,0 s** del clic · primer fotograma en pantalla a **4,4–5,3 s** del clic (el contador de la app marca `ff 5,1–6,1 s`, que cuenta desde la creación del job) · render de 4 escenas completo a **22–36 s** del clic según carga. |
 | **Duración** | 34 s. Si el render se te va a 36 s no cabe entero: **corta en el montaje** cuando la barra de progreso pase de la mitad y entra directo al tramo 3. El número final (`RENDER TOTAL`) se ve igualmente en el tramo 3. |
@@ -89,7 +91,7 @@ dos extremos estás.
 | | |
 |---|---|
 | **En pantalla** | Escribes la nota de revisión y pulsas **Reject**. El badge cambia a **`LIVE — refinando la toma rechazada`**. El panel **AGENTLOOP** de la derecha se llena en tiempo real: `Rechazo de la productora: "el logo queda ilegible en el plano detalle"` → `AgentLoop: juez de visión → prompt refinado → escena relanzada` → `score 0.42` → `toma a rejected/ · AgentLoop relanza la escena`. El FEED marca `REJECTED` y `JUDGE_SCORE`. A los ~8 s aparece una **ESCENA 5 · «Escena 4 — toma refinada 1»** y el job vuelve a `IN REVIEW`. |
-| **Se dice** | «Rechazo en el segundo quince: “el logo queda ilegible en el plano detalle”. Esa nota entra literal en el prompt de la nueva pasada del AgentLoop. La toma mala baja a `rejected/` en el bucket, el run nuevo cuelga del anterior por `parent_run_id` —el manifest guarda la cadena entera— y **la toma refinada se añade a la misma playlist**, así que entra en vivo sin recargar nada.» |
+| **Se dice (EN)** | «I reject at second fifteen: “the logo is unreadable in the detail shot.” That note goes straight into the prompt for the AgentLoop's next pass. The rejected take drops into `rejected/` in the bucket, the new run hangs off the previous one through `parent_run_id` — the manifest keeps the whole chain — and **the refined take joins the same playlist**, so it arrives live with no reload and no second link.» |
 | **Comandos / clics** | 1) clic en el campo **Nota de revisión**, escribir `el logo queda ilegible en el plano detalle`. 2) desplegable **ESCENA → escena 2** (opcional; si lo dejas en «última» refina la última). 3) clic en **Reject**. |
 | **Tiempos reales** | panel AgentLoop lleno a **~3 s** del clic · toma refinada en la playlist y job en `in_review` a **8,4–12,9 s**. |
 | **Duración** | 28 s |
@@ -106,7 +108,7 @@ dos extremos estás.
 | | |
 |---|---|
 | **En pantalla** | Pulsas `k`. Se abre el modal **CHAOS — MATAR UN PROVEEDOR EN DIRECTO** con cuatro proveedores. Matas `gmicloud`. Cierras y lanzas otro spot. A los ~6 s salta el toast: **`FAILOVER DE PROVEEDOR · GMICLOUD · ESCENA 1` / `pixverse-v5.6 MODEL_ERROR → fallback: seedance-2-0`**, y el panel AGENTLOOP lo registra escena a escena. El render **no se detiene**. Rótulo: **«0 acciones humanas para recuperarse»**. |
-| **Se dice** | «Mato el proveedor de vídeo en directo. Genblaze lanza un `MODEL_ERROR` de verdad —no un timeout, que es lo único que dispara `fallback_models`— y el pipeline salta solo de `pixverse-v5.6` a `seedance-2-0`. Cero acciones humanas.» |
+| **Se dice (EN)** | «I kill the video provider live. Genblaze raises a real `MODEL_ERROR` — not a timeout, which is the only thing `fallback_models` reacts to — and the pipeline falls over from `pixverse-v5.6` to `seedance-2-0` on its own. Zero human actions.» |
 | **Comandos / clics** | 1) tecla `k`. 2) clic en **Matar** en la fila `gmicloud`. 3) `Esc`. 4) pegar un brief corto (`spot 15 s zapatilla Aeron, contraluz de amanecer`) y clic en **New spot**. |
 | **Tiempos reales** | modal abierto a **0,8 s** · proveedor muerto a **3 s** · toast de failover en pantalla a **~14 s** del inicio del tramo. |
 | **Después** | **Revive el proveedor** antes de seguir: `k` → **Revivir** en `gmicloud`, o `curl -s -X POST localhost:8000/api/chaos -H 'content-type: application/json' -d '{"provider":"gmicloud","dead":false}'`. Si no, el job del tramo 5 también saldrá con failovers. |
@@ -119,7 +121,7 @@ dos extremos estás.
 | | |
 |---|---|
 | **En pantalla** | Vuelves al job del tramo 3 y pulsas **Approve**. Toast verde: **`APROBADO · OBJECT LOCK GOVERNANCE` — `approved/{job}/final.mp4` retención hasta 2026-09-02`**, banda verde bajo los botones **`Object Lock GOVERNANCE · 30 días`**, y en el panel **PROVENANCE** la fila `lock GOVERNANCE hasta …`. Después pulsas **Verify** y el panel imprime el resultado del CLI: `✓ MANIFEST VERIFICADO (exit 0)`, `manifest: embebido en la caja uuid de genblaze`, `schema_version 1.5`, `canonical_hash …`, `hash_ok True`. |
-| **Se dice** | «Apruebo. El máster se concatena, se le **embebe el manifest de provenance dentro del propio MP4** —en la caja `uuid` de Genblaze— y se sube a `approved/` con **Object Lock GOVERNANCE a treinta días**. A partir de aquí ni una regla de lifecycle puede borrar esa versión. Y `genblaze verify` lo comprueba: hash canónico correcto, manifest embebido, entregable auditable.» |
+| **Se dice (EN)** | «I approve. The master is concatenated, the **provenance manifest is embedded inside the MP4 itself** — in Genblaze's `uuid` box — and it goes to `approved/` under **Object Lock in GOVERNANCE mode for thirty days**. From here, not even a lifecycle rule can delete that version. And `genblaze verify` proves it: canonical hash checks out, manifest embedded, auditable deliverable.» |
 | **Comandos / clics** | 1) clic en el job del tramo 3 en la lista. 2) clic en **Approve**. 3) esperar el toast (~7 s). 4) clic en **Verify** (arriba a la derecha del panel PROVENANCE). |
 | **Tiempos reales** | approve completo (concat + embed + subida con Object Lock) **4,8–6,6 s** · verify: clic → panel relleno **6–9 s** (di la frase del manifest mientras corre, no dejes silencio). |
 | **Duración** | 34 s |
@@ -162,7 +164,7 @@ modo mock no genera producto real.
 | | |
 |---|---|
 | **En pantalla** | Un solo diagrama, estático. Bloques: `navegador → FastAPI (REST + SSE + HLS) → B2` y `FastAPI → Genblaze pipeline`. Sobreimpresiones que van apareciendo mientras las nombras. Últimos 5 s: la URL viva a pantalla completa. |
-| **Se dice** | «Todo esto se apoya en dos cosas. **B2**: HLS incremental servido desde el bucket segmento a segmento, Event Notifications firmadas con HMAC, Object Lock GOVERNANCE que las reglas de lifecycle no pueden tocar, `daysFromStartingToCancelingUnfinishedLargeFiles` para que un render muerto no deje un multipart huérfano, y application keys de solo lectura para que el revisor externo nunca tenga una clave que pueda escribir. Y **Genblaze**: un pipeline por escena con `fallback_models`, AgentLoop con Evaluator y juez de visión, fan-in con FFmpeg, `manifest_lock`, `ObjectStorageSink` y `replay`. Además dejamos tres PRs y un issue abiertos en el repo de Genblaze con los bugs que nos encontramos por el camino.» |
+| **Se dice (EN)** | «All of this rests on two things. **B2**: incremental HLS served from the bucket segment by segment, Event Notifications signed with HMAC, Object Lock in GOVERNANCE mode that lifecycle rules cannot touch, `daysFromStartingToCancelingUnfinishedLargeFiles` so a dead render never leaves an orphaned multipart, and read-only application keys so an outside reviewer never holds a key that can write. And **Genblaze**: a pipeline per scene with `fallback_models`, an AgentLoop with an Evaluator and a real vision judge, FFmpeg fan-in, `manifest_lock`, `ObjectStorageSink` and `replay`. We also left three pull requests and an issue open on the Genblaze repo, for the bugs we hit building this.» |
 | **Cierre** | Rótulo: la URL + **«el primer segundo, en el primer segundo»**. |
 | **Comandos / clics** | Ninguno. Plano fijo. |
 | **Duración** | 42 s |
