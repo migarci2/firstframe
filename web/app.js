@@ -78,10 +78,10 @@ function api(path, opts) {
 function humanSecs(ms) {
   if (ms == null || isNaN(ms)) return '';
   var s = Math.max(1, Math.round(ms / 1000));
-  if (s < 60) return s + (s === 1 ? ' segundo' : ' segundos');
+  if (s < 60) return s + (s === 1 ? ' second' : ' seconds');
   var m = Math.floor(s / 60), r = s % 60;
-  var out = m + (m === 1 ? ' minuto' : ' minutos');
-  if (r) out += ' y ' + r + (r === 1 ? ' segundo' : ' segundos');
+  var out = m + (m === 1 ? ' minute' : ' minutes');
+  if (r) out += ' ' + r + (r === 1 ? ' second' : ' seconds');
   return out;
 }
 
@@ -94,21 +94,21 @@ function daysLeft(iso) {
 // El identificador del job no pinta nada delante de Ana: se usa el título.
 function spotTitle(job) {
   var t = (job.title || job.brief || '').trim();
-  if (!t) return 'Spot sin título';
+  if (!t) return 'Untitled spot';
   if (t.length > 70) t = t.slice(0, 68).replace(/[\s,;.]+$/, '') + '…';
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 var STATUS = {
-  queued:    { label: 'Preparando',        tone: 'live'  },
-  rendering: { label: 'Generando',         tone: 'live'  },
-  in_review: { label: 'Listo para revisar', tone: 'ready' },
-  approved:  { label: 'Aprobado',          tone: 'good'  },
-  rejected:  { label: 'Rehaciendo',        tone: 'live'  },
-  failed:    { label: 'No se pudo terminar', tone: 'bad' }
+  queued:    { label: 'Queued',            tone: 'live'  },
+  rendering: { label: 'Generating',        tone: 'live'  },
+  in_review: { label: 'Ready for review',  tone: 'ready' },
+  approved:  { label: 'Approved',          tone: 'good'  },
+  rejected:  { label: 'Reworking',         tone: 'live'  },
+  failed:    { label: 'Failed',            tone: 'bad'  }
 };
 function statusOf(job) {
-  if (isRefining(job)) return { label: 'Rehaciendo', tone: 'live' };
+  if (isRefining(job)) return { label: 'Reworking', tone: 'live' };
   return STATUS[job.status] || { label: job.status, tone: '' };
 }
 
@@ -125,34 +125,32 @@ function sayLine(job) {
   var ff = job.first_frame_ms, total = job.total_render_ms;
 
   if (job.status === 'failed') {
-    return { text: 'No pudimos terminar este spot. Puedes volver a intentarlo con el mismo texto.', tone: 'bad' };
+    return { text: 'We could not finish this spot. You can try again with the same brief.', tone: 'bad' };
   }
 
   if (job.status === 'approved') {
     var d = job.lock ? daysLeft(job.lock.retain_until) : 30;
-    return { text: 'Aprobado y protegido: nadie puede borrarlo ni modificarlo durante ' +
-                   d + ' días.', tone: 'good' };
+    return { text: 'Approved and locked: nobody can delete or modify it for ' + d + ' days.', tone: 'good' };
   }
 
   if (isRefining(job)) {
-    return { text: 'Estamos rehaciendo esa parte. La verás aquí en cuanto esté lista.', tone: '' };
+    return { text: 'We are reworking that part. It will appear here as soon as it is ready.', tone: '' };
   }
 
   if (isLive(job)) {
-    if (ff == null) return { text: 'Generando… en cuanto haya imagen empieza sola.', tone: '' };
-    return { text: 'Ya puedes ver el principio: apareció en ' + humanSecs(ff) + '.', tone: '' };
+    if (ff == null) return { text: 'Generating — playback starts on its own as soon as there are frames.', tone: '' };
+    return { text: 'You can already watch the opening: it appeared in ' + humanSecs(ff) + '.', tone: '' };
   }
 
   // in_review / rejected: aquí es donde se cobra la promesa del producto.
   if (ff != null && total) {
     var ratio = total / ff;
     if (ratio >= 1.8) {
-      return { text: 'Pudiste verlo ' + Math.round(ratio) +
-                     ' veces antes de que terminara de generarse.', tone: '' };
+      return { text: 'You could watch it ' + Math.round(ratio) + ' times over before it finished rendering.', tone: '' };
     }
-    return { text: 'Estuvo listo para ver ' + humanSecs(total - ff) + ' antes de terminar.', tone: '' };
+    return { text: 'It was watchable ' + humanSecs(total - ff) + ' before it finished.', tone: '' };
   }
-  return { text: 'Listo para revisar.', tone: '' };
+  return { text: 'Ready for review.', tone: '' };
 }
 
 /* ═════════════════════════════ toasts ═════════════════════════════ */
@@ -205,14 +203,14 @@ var Player = {
       // Tras un rechazo la playlist ya llevaba ENDLIST y hls.js la trata como VOD:
       // hay que volver a loadSource() para ver la toma refinada (API.md §decision).
       this.frags = 0; this.autoplayed = false;
-      this.veil('Enganchando con la nueva versión…');
+      this.veil('Reattaching to the new version…');
       this.hls.loadSource(url);
       return;
     }
 
     this.teardown();
     this.jobId = job.id;
-    this.veil(isLive(job) ? 'Preparando el primer plano…' : null);
+    this.veil(isLive(job) ? 'Preparing the first shot…' : null);
 
     var forced = (/[?&]player=(\w+)/.exec(location.search) || [])[1];
     if (forced === 'mse') { this.fallbackMse(url); return; }
@@ -374,7 +372,7 @@ function renderJobs() {
   clear(list);
 
   if (!S.jobs.length) {
-    list.appendChild(el('div', 'side-empty', 'Todavía no has creado ninguno.'));
+    list.appendChild(el('div', 'side-empty', 'You have not created any yet.'));
     return;
   }
 
@@ -410,7 +408,7 @@ function renderStage() {
   var chip = $('chip-live');
   if (isLive(job)) {
     chip.hidden = false;
-    $('chip-live-text').textContent = isRefining(job) ? 'Rehaciendo' : 'Generando';
+    $('chip-live-text').textContent = isRefining(job) ? 'Reworking' : 'Generating';
   } else {
     chip.hidden = true;
   }
@@ -437,12 +435,12 @@ function renderActions(job) {
   clear(box);
 
   if (job.status === 'in_review' || job.status === 'rejected') {
-    var chg = el('button', 'ghost', 'Pedir cambios');
+    var chg = el('button', 'ghost', 'Request changes');
     chg.type = 'button';
     chg.addEventListener('click', openChanges);
     box.appendChild(chg);
 
-    var ok = el('button', 'primary', 'Aprobar');
+    var ok = el('button', 'primary', 'Approve');
     ok.type = 'button';
     ok.addEventListener('click', function () { ok.disabled = true; decide('approve'); });
     box.appendChild(ok);
@@ -450,7 +448,7 @@ function renderActions(job) {
   }
 
   if (job.status === 'approved') {
-    var dl = el('button', 'primary', 'Descargar');
+    var dl = el('button', 'primary', 'Download');
     dl.type = 'button';
     dl.addEventListener('click', function () { download(job); });
     box.appendChild(dl);
@@ -458,7 +456,7 @@ function renderActions(job) {
   }
 
   if (job.status === 'failed') {
-    var retry = el('button', 'primary', 'Volver a intentarlo');
+    var retry = el('button', 'primary', 'Try again');
     retry.type = 'button';
     retry.addEventListener('click', function () {
       $('brief').value = job.brief || job.title || '';
@@ -473,9 +471,9 @@ function renderNoteScenes(job) {
   var sel = $('note-scene');
   var keep = sel.value;
   clear(sel);
-  var o0 = el('option', null, 'la última escena'); o0.value = ''; sel.appendChild(o0);
+  var o0 = el('option', null, 'the last scene'); o0.value = ''; sel.appendChild(o0);
   (job.scenes || []).forEach(function (s) {
-    var o = el('option', null, 'la escena ' + s.n);
+    var o = el('option', null, 'scene ' + s.n);
     o.value = String(s.n);
     sel.appendChild(o);
   });
@@ -497,7 +495,7 @@ function createSpot() {
   }
   var btn = $('btn-create');
   btn.disabled = true;
-  btn.textContent = 'Creando…';
+  btn.textContent = 'Creating…';
 
   api('/api/jobs', { method: 'POST', body: {
     brief: brief, title: brief.slice(0, 70), scenes: S.scenes
@@ -507,13 +505,13 @@ function createSpot() {
     S.sel = null;
     select(job.id, { force: true });
     $('brief').value = '';
-    pushFeed('job_update', job.id, 'job creado · pipeline arrancado');
+    pushFeed('job_update', job.id, 'job created · pipeline started');
   }).catch(function (e) {
-    toast('bad', 'No pudimos crear el spot.', 'Inténtalo otra vez en unos segundos.', 9000);
+    toast('bad', 'We could not create the spot.', 'Try again in a few seconds.', 9000);
     pushFeed('error', null, 'POST /api/jobs: ' + e.message);
   }).then(function () {
     btn.disabled = false;
-    btn.textContent = 'Crear spot';
+    btn.textContent = 'Create spot';
   });
 }
 
@@ -529,10 +527,10 @@ function decide(action, note, scene) {
       if (action === 'reject') {
         $('changes').hidden = true;
         $('note').value = '';
-        toast('', 'Tomamos nota.', 'Estamos rehaciendo esa parte; la verás aquí en cuanto esté.', 8000);
+        toast('', 'Noted.', 'We are reworking that part; it will appear here shortly.', 8000);
         pushIter(job.id, { _live: true, at: Date.now(), scene: body.scene || null,
-                           reason: 'Rechazo de la productora: "' + (note || 'sin nota') + '"',
-                           action: 'toma a rejected/ · AgentLoop relanza la escena' });
+                           reason: 'Producer rejection: "' + (note || 'sin nota') + '"',
+                           action: 'take moved to rejected/ · AgentLoop relaunches the scene' });
         var j = jobById(job.id);
         if (j) Player.load(j, { reattach: true });
       }
@@ -540,8 +538,8 @@ function decide(action, note, scene) {
     })
     .catch(function (e) {
       var msg = e.status === 409
-        ? 'Este spot todavía se está generando. Espera a que termine.'
-        : 'No pudimos guardar tu decisión. Inténtalo de nuevo.';
+        ? 'This spot is still rendering. Wait for it to finish.'
+        : 'We could not save your decision. Try again.';
       toast('bad', msg, null, 9000);
       pushFeed('error', job.id, 'decision ' + action + ': ' + e.message);
       renderStage();
@@ -551,10 +549,10 @@ function decide(action, note, scene) {
 function download(job) {
   api('/api/download/' + job.id).then(function (d) {
     if (d && d.url) window.open(d.url, '_blank', 'noopener');
-    else toast('bad', 'La descarga no está disponible ahora mismo.', null, 8000);
+    else toast('bad', 'The download is not available right now.', null, 8000);
   }).catch(function (e) {
-    toast('bad', 'La descarga no está disponible ahora mismo.',
-          'El vídeo sigue guardado y protegido.', 9000);
+    toast('bad', 'The download is not available right now.',
+          'The video is still stored and locked.', 9000);
     pushFeed('error', job.id, 'download: ' + e.message);
   });
 }
@@ -613,7 +611,7 @@ function renderProv() {
   var body = $('g-prov');
   clear(body);
   var job = selJob();
-  if (!job) { body.appendChild(el('div', 'tnote', 'Selecciona un spot.')); return; }
+  if (!job) { body.appendChild(el('div', 'tnote', 'Select a spot.')); return; }
 
   function kv(k, v) {
     var r = el('div', 'kv');
@@ -654,12 +652,12 @@ function renderProv() {
 
   var box = el('div', 'jsonbox', '');
   if (!job.manifest_url) {
-    box.textContent = 'Sin manifest todavía — se escribe cuando termina el render.';
+    box.textContent = 'No manifest yet — it is written when the render finishes.';
     body.appendChild(box);
   } else if (job.status !== 'approved') {
-    box.textContent = 'El manifest se sella al aprobar.\nClave prevista: provenance/' +
+    box.textContent = 'The manifest is sealed on approval.\nExpected key: provenance/' +
                       job.id + '/manifest.json';
-    var lbtn = el('button', 'minibtn', 'Cargar manifest igualmente');
+    var lbtn = el('button', 'minibtn', 'Load manifest anyway');
     lbtn.type = 'button';
     lbtn.addEventListener('click', function () { fetchManifest(job, box); });
     body.appendChild(lbtn);
@@ -671,34 +669,34 @@ function renderProv() {
 }
 
 function fetchManifest(job, box) {
-  box.textContent = 'cargando manifest…';
+  box.textContent = 'loading manifest…';
   var forJob = job.id;
   fetch(job.manifest_url, { cache: 'no-store' }).then(function (r) {
     return r.text().then(function (t) { return { ok: r.ok, status: r.status, t: t }; });
   }).then(function (res) {
     if (S.sel !== forJob || !box.parentNode) return;
-    if (!res.ok) { box.textContent = 'manifest no disponible (HTTP ' + res.status + ')'; return; }
+    if (!res.ok) { box.textContent = 'manifest unavailable (HTTP ' + res.status + ')'; return; }
     try { box.textContent = JSON.stringify(JSON.parse(res.t), null, 1); }
     catch (e) { box.textContent = res.t.slice(0, 1400); }
   }).catch(function (e) {
-    if (box.parentNode) box.textContent = 'manifest no disponible: ' + e.message;
+    if (box.parentNode) box.textContent = 'manifest unavailable: ' + e.message;
   });
 }
 
 function verify(job, btn) {
   btn.disabled = true;
   var prev = btn.textContent;
-  btn.textContent = 'verificando…';
-  var box = el('div', 'verify-out', 'ejecutando `genblaze verify` en el servidor…');
+  btn.textContent = 'verifying…';
+  var box = el('div', 'verify-out', 'running `genblaze verify` on the server…');
   btn.parentNode.insertBefore(box, btn.nextSibling);
 
   api('/api/verify/' + job.id).then(function (d) {
     box.className = 'verify-out ' + (d.verified ? 'ok' : 'bad');
-    box.textContent = (d.verified ? '✔ MANIFEST VERIFICADO' : '✖ NO VERIFICADO') +
+    box.textContent = (d.verified ? '✔ MANIFEST VERIFIED' : '✖ NOT VERIFIED') +
                       '  (exit ' + d.exit_code + ')\n' + (d.output || '');
   }).catch(function (e) {
     box.className = 'verify-out bad';
-    box.textContent = 'verify falló: ' + e.message;
+    box.textContent = 'verify failed: ' + e.message;
   }).then(function () {
     btn.disabled = false;
     btn.textContent = prev;
@@ -713,7 +711,7 @@ function renderObjects() {
   var objs = (det && det.objects) || [];
   $('n-objects').textContent = objs.length;
   if (!objs.length) {
-    body.appendChild(el('div', 'tnote', 'Sin objetos listados todavía.'));
+    body.appendChild(el('div', 'tnote', 'No objects listed yet.'));
     return;
   }
   var lin = el('div', 'lin');
@@ -739,8 +737,8 @@ function renderAgentLoop() {
 
   if (!arr.length) {
     body.appendChild(el('div', 'tnote',
-      'Sin iteraciones del juez todavía. Pide cambios sobre una toma para ver el AgentLoop: ' +
-      'el juez de visión puntúa, refina el prompt y relanza la escena.'));
+      'No judge iterations yet. Request changes on a take to see the AgentLoop: ' +
+      'the vision judge scores it, refines the prompt and relaunches the scene.'));
     return;
   }
 
@@ -772,7 +770,7 @@ function renderTechScenes() {
   var scenes = (job && job.scenes) || [];
   var ready = scenes.filter(function (s) { return s.status === 'ready'; }).length;
   $('n-scenes').textContent = job ? ready + '/' + (job.scene_count || scenes.length) : '';
-  if (!scenes.length) { body.appendChild(el('div', 'tnote', 'Sin escenas todavía.')); return; }
+  if (!scenes.length) { body.appendChild(el('div', 'tnote', 'No scenes yet.')); return; }
   scenes.forEach(function (s) {
     var r = el('div', 'scenerow ' + s.status);
     r.appendChild(el('span', 'no', String(s.n)));
@@ -801,7 +799,7 @@ function renderFeed() {
   var body = $('g-feed');
   clear(body);
   $('n-feed').textContent = S.feed.length;
-  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Esperando eventos de B2…')); return; }
+  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Waiting for B2 events…')); return; }
   S.feed.slice(-70).reverse().forEach(function (f) {
     var r = el('div', 'feedrow');
     r.appendChild(el('span', 't', fmtClock(f.at)));
@@ -816,13 +814,13 @@ function renderChaos() {
   var body = $('g-chaos');
   clear(body);
   body.appendChild(el('div', 'tnote',
-    'Mata un proveedor en directo: el siguiente MODEL_ERROR disparará fallback_models.'));
+    'Kill a provider live: the next MODEL_ERROR will trigger fallback_models.'));
   CHAOS_PROVIDERS.forEach(function (p) {
     var dead = !!S.chaos[p];
     var row = el('div', 'chaosrow');
     row.appendChild(el('span', 'nm', p));
-    row.appendChild(el('span', 'state' + (dead ? ' dead' : ''), dead ? 'muerto' : 'vivo'));
-    var b = el('button', 'minibtn', dead ? 'Revivir' : 'Matar');
+    row.appendChild(el('span', 'state' + (dead ? ' dead' : ''), dead ? 'down' : 'up'));
+    var b = el('button', 'minibtn', dead ? 'Revive' : 'Kill');
     b.type = 'button';
     b.style.marginTop = '0';
     b.addEventListener('click', function () {
@@ -882,7 +880,7 @@ function railScenes() {
   var sc = (job && job.scenes) || [];
   var ready = sc.filter(function (x) { return x.status === 'ready'; }).length;
   $('r-n-scenes').textContent = job ? ready + '/' + (job.scene_count || sc.length) : '';
-  if (!sc.length) { body.appendChild(el('div', 'tnote', 'Sin escenas todavía.')); return; }
+  if (!sc.length) { body.appendChild(el('div', 'tnote', 'No scenes yet.')); return; }
   sc.forEach(function (x) {
     var r = el('div', 'scenerow ' + x.status);
     r.appendChild(el('span', 'no', String(x.n)));
@@ -934,7 +932,7 @@ function railFeed() {
   if (!body) return;
   clear(body);
   $('r-n-feed').textContent = S.feed.length;
-  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Esperando eventos de B2…')); return; }
+  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Waiting for B2 events…')); return; }
   S.feed.slice(-40).reverse().forEach(function (f) {
     var r = el('div', 'feedrow');
     r.appendChild(el('span', 't', fmtClock(f.at)));
@@ -969,13 +967,13 @@ function loadDetail(id) {
         arr.push({ at: ev.at, scene: ev.scene, score: ev.score, reason: ev.detail || null,
                    iteration: ev.iteration });
       } else if (ev.kind === 'retry') {
-        arr.push({ at: ev.at, scene: ev.scene, reason: ev.detail || 'reintento',
-                   action: 'escena relanzada' });
+        arr.push({ at: ev.at, scene: ev.scene, reason: ev.detail || 'retry',
+                   action: 'scene relaunched' });
       } else if (ev.kind === 'provider_failover') {
         arr.push({ at: ev.at, scene: ev.scene,
                    reason: (ev.model ? ev.model + ' · ' : '') +
-                           (ev.detail || 'MODEL_ERROR en el proveedor primario'),
-                   action: 'fallback_models → ' + (ev.fallback_model || 'modelo de respaldo') });
+                           (ev.detail || 'MODEL_ERROR on the primary provider'),
+                   action: 'fallback_models → ' + (ev.fallback_model || 'fallback model') });
       }
     });
     var live = (S.iters[id] || []).filter(function (x) { return x._live; });
@@ -1031,17 +1029,17 @@ function handleEvent(type, d) {
     case 'render_complete':
       if (d.job) upsertJob(d.job);
       if (type === 'scene_ready') {
-        pushFeed('scene_ready', jid, 'escena ' + d.scene + ' lista' + (d.ms ? ' · ' + d.ms + ' ms' : ''));
+        pushFeed('scene_ready', jid, 'escena ' + d.scene + ' ready' + (d.ms ? ' · ' + d.ms + ' ms' : ''));
       } else if (type === 'render_complete') {
         pushFeed('render_complete', jid, 'total_render_ms ' + d.total_render_ms);
-        if (jid === S.sel) toast('', 'Tu spot está listo para revisar.', null, 7000);
+        if (jid === S.sel) toast('', 'Your spot is ready for review.', null, 7000);
       } else {
         pushFeed('job_update', jid, (d.job && d.job.status) || '');
       }
       return;
 
     case 'render_started':
-      pushFeed('render_started', jid, 'primer segmento en B2 · escena ' + (d.scene != null ? d.scene : '—'));
+      pushFeed('render_started', jid, 'first segment on B2 · scene ' + (d.scene != null ? d.scene : '—'));
       if (d.job) upsertJob(d.job);
       return;
 
@@ -1053,9 +1051,9 @@ function handleEvent(type, d) {
 
     case 'provider_failover':
       // Ana no necesita saber qué modelo era: sólo que no ha perdido el trabajo.
-      toast('warn', 'Un proveedor falló; seguimos con otro sin perder el trabajo.', null, 9000);
+      toast('warn', 'A provider failed; we continued on another one without losing the work.', null, 9000);
       pushFeed('provider_failover', jid,
-               (d.model || '?') + ' → ' + (d.fallback_model || '?') + (d.scene ? ' · escena ' + d.scene : ''));
+               (d.model || '?') + ' → ' + (d.fallback_model || '?') + (d.scene ? ' · scene ' + d.scene : ''));
       if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene,
                                reason: (d.model || '?') + ' MODEL_ERROR en ' + (d.provider || '?'),
                                action: 'fallback → ' + (d.fallback_model || '?') });
@@ -1065,8 +1063,8 @@ function handleEvent(type, d) {
       pushFeed('judge_score', jid, 'escena ' + d.scene + ' · score ' + (d.score != null ? d.score.toFixed(2) : '—'));
       if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene, score: d.score,
                                iteration: d.iteration,
-                               reason: d.detail || d.reason || 'juez de visión (llama-3.2-90b-vision)',
-                               action: (d.score != null && d.score < 0.6) ? 'prompt refinado · escena relanzada' : null });
+                               reason: d.detail || d.reason || 'vision judge (llama-3.2-90b-vision)',
+                               action: (d.score != null && d.score < 0.6) ? 'prompt refined · scene relaunched' : null });
       return;
 
     case 'approved':
@@ -1074,14 +1072,13 @@ function handleEvent(type, d) {
       pushFeed('approved', jid, 'Object Lock GOVERNANCE · ' + (d.key || ''));
       if (jid === S.sel) {
         var days = d.lock ? daysLeft(d.lock.retain_until) : 30;
-        toast('good', 'Aprobado y protegido.',
-              'Nadie puede borrarlo ni modificarlo durante ' + days + ' días.', 9000);
+        toast('good', 'Approved and locked.', 'Nobody can delete or modify it for ' + days + ' days.', 9000);
       }
       return;
 
     case 'rejected':
       if (d.job) upsertJob(d.job);
-      pushFeed('rejected', jid, 'nota: ' + (d.note || '') + (d.scene ? ' · escena ' + d.scene : ''));
+      pushFeed('rejected', jid, 'note: ' + (d.note || '') + (d.scene ? ' · scene ' + d.scene : ''));
       if (jid === S.sel) {
         var j = jobById(jid);
         if (j) Player.load(j, { reattach: true });
@@ -1091,10 +1088,10 @@ function handleEvent(type, d) {
 
     case 'chaos':
       S.chaos[d.provider] = !!d.dead;
-      pushFeed('chaos', jid, d.provider + (d.dead ? ' MUERTO' : ' revivido'));
+      pushFeed('chaos', jid, d.provider + (d.dead ? ' DOWN' : ' back up'));
       toast(d.dead ? 'warn' : 'good',
-            d.dead ? 'Proveedor desconectado a propósito.' : 'Proveedor de vuelta.',
-            d.dead ? 'El siguiente intento cambiará solo a otro proveedor.' : null, 7000);
+            d.dead ? 'Provider taken down on purpose.' : 'Provider back up.',
+            d.dead ? 'The next attempt will switch to another provider on its own.' : null, 7000);
       renderChaos();
       return;
   }
@@ -1118,13 +1115,11 @@ function loadHealth() {
     if (h.degraded && !loadHealth._warned) {
       loadHealth._warned = true;
       // Traducido: nada de cuotas ni transacciones.
-      toast('warn', 'Estamos con capacidad reducida.',
-            'Puedes seguir creando, viendo y aprobando con normalidad.', 12000);
+      toast('warn', 'Running at reduced capacity.', 'You can keep creating, watching and approving as normal.', 12000);
       pushFeed('error', null, 'health: ' + (h.warning || 'degraded'));
     }
   }).catch(function (e) {
-    toast('bad', 'No conseguimos hablar con el servidor.',
-          'Seguimos reintentando; no pierdes nada de lo que ya hay.', 12000);
+    toast('bad', 'Cannot reach the server.', 'Still retrying — nothing you already have is lost.', 12000);
     pushFeed('error', null, 'GET /api/health: ' + e.message);
   });
 }
@@ -1189,7 +1184,7 @@ function start() {
   // El raíl se puede cerrar para que el plano respire al grabar.
   $('btn-rail').addEventListener('click', function () {
     var hid = document.body.classList.toggle('no-rail');
-    this.textContent = hid ? 'Mostrar raíl' : 'Ocultar raíl';
+    this.textContent = hid ? 'Show panel' : 'Hide panel';
     this.setAttribute('aria-expanded', hid ? 'false' : 'true');
   });
   $('btn-tech').addEventListener('click', function () { toggleTech(); });

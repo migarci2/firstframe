@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1280, initial-scale=1">
@@ -8,7 +8,7 @@
      (?v=) y el documento pide no cachearse. -->
 <meta http-equiv="Cache-Control" content="no-store">
 <title>FirstFrame</title>
-<link rel="stylesheet" href="/styles.css?v=13">
+<link rel="stylesheet" href="/styles.css?v=14">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23040506'/><path d='M10 9h12v3.2H13.4v3.9h7.8v3.2h-7.8V24H10z' fill='%23ffffff'/></svg>">
 </head>
 <body>
@@ -16,16 +16,16 @@
 <header class="top">
   <div class="wordmark">FirstFrame<i>.</i></div>
   <div class="topmeta" id="topmeta"></div>
-  <button class="linkbtn" id="btn-rail" type="button" aria-expanded="true">Ocultar raíl</button>
-  <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Detalles técnicos</button>
+  <button class="linkbtn" id="btn-rail" type="button" aria-expanded="true">Hide panel</button>
+  <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Technical details</button>
 </header>
 
 <div class="shell">
 
   <!-- ─────────────── barra lateral: los spots ─────────────── -->
   <aside class="side">
-    <button class="newbtn" id="btn-new" type="button">Nuevo spot</button>
-    <div class="side-label">Tus spots</div>
+    <button class="newbtn" id="btn-new" type="button">New spot</button>
+    <div class="side-label">Your spots</div>
     <div class="joblist" id="joblist"></div>
   </aside>
 
@@ -34,17 +34,17 @@
 
     <!-- paso 1: escribir el brief -->
     <section class="compose" id="view-compose">
-      <h1>¿Qué quieres que creemos?</h1>
-      <p class="compose-sub">Descríbelo con tus palabras. Lo verás en pantalla en unos segundos, sin esperar a que termine.</p>
+      <h1>What should we make?</h1>
+      <p class="compose-sub">Describe it in plain words. You'll be watching it within seconds — no waiting for the render to finish.</p>
       <textarea id="brief" rows="3" spellcheck="false"
-        placeholder="Un spot de 15 segundos para una zapatilla de running. Luz de amanecer, ciudad vacía, ritmo tranquilo."></textarea>
+        placeholder="A 15-second spot for a running shoe. Dawn light, empty city, unhurried pace."></textarea>
       <div class="compose-row">
-        <div class="seg" id="len-picker" role="group" aria-label="Duración">
-          <button type="button" data-scenes="3">Corto</button>
-          <button type="button" data-scenes="4" class="on">Medio</button>
-          <button type="button" data-scenes="6">Largo</button>
+        <div class="seg" id="len-picker" role="group" aria-label="Length">
+          <button type="button" data-scenes="3">Short</button>
+          <button type="button" data-scenes="4" class="on">Medium</button>
+          <button type="button" data-scenes="6">Long</button>
         </div>
-        <button class="primary big" id="btn-create" type="button">Crear spot</button>
+        <button class="primary big" id="btn-create" type="button">Create spot</button>
       </div>
     </section>
 
@@ -53,8 +53,8 @@
       <div class="videostage">
         <div class="videowrap">
           <video id="player" playsinline muted controls></video>
-          <div class="chip" id="chip-live" hidden><i></i><span id="chip-live-text">Generando</span></div>
-          <div class="veil" id="veil" hidden><span id="veil-text">Preparando el primer plano…</span></div>
+          <div class="chip" id="chip-live" hidden><i></i><span id="chip-live-text">Generating</span></div>
+          <div class="veil" id="veil" hidden><span id="veil-text">Preparing the first shot…</span></div>
         </div>
       </div>
       <div class="progress" id="progress" hidden><i id="progress-fill"></i></div>
@@ -69,16 +69,16 @@
 
       <!-- pedir cambios -->
       <div class="changes" id="changes" hidden>
-        <label for="note">¿Qué cambiarías?</label>
+        <label for="note">What would you change?</label>
         <textarea id="note" rows="2" spellcheck="false"
-          placeholder="El logo se lee mal en el plano corto."></textarea>
+          placeholder="The logo is hard to read in the close-up."></textarea>
         <div class="changes-row">
-          <label class="pick">Aplícalo a
-            <select id="note-scene"><option value="">la última escena</option></select>
+          <label class="pick">Apply to
+            <select id="note-scene"><option value="">the last scene</option></select>
           </label>
           <span class="grow"></span>
-          <button class="ghost" id="btn-changes-cancel" type="button">Cancelar</button>
-          <button class="primary" id="btn-changes-send" type="button">Enviar cambios</button>
+          <button class="ghost" id="btn-changes-cancel" type="button">Cancel</button>
+          <button class="primary" id="btn-changes-send" type="button">Send changes</button>
         </div>
       </div>
     </section>
@@ -86,22 +86,22 @@
   </main>
 
   <!-- ─────────────── raíl: la evidencia, siempre a la vista ─────────────── -->
-  <aside class="rail" id="rail" aria-label="Ejecución">
+  <aside class="rail" id="rail" aria-label="Run">
     <div class="rail-chips" id="r-chips"></div>
 
     <section class="rblock">
-      <h4>Escenas <span class="n" id="r-n-scenes"></span></h4>
+      <h4>Scenes <span class="n" id="r-n-scenes"></span></h4>
       <div id="r-scenes"></div>
     </section>
 
     <section class="rblock">
-      <h4>Procedencia</h4>
+      <h4>Provenance</h4>
       <div id="r-prov"></div>
       <div class="jsonbox" id="r-json">—</div>
     </section>
 
     <section class="rblock rblock-feed">
-      <h4>Eventos <span class="n" id="r-n-feed">0</span></h4>
+      <h4>Events <span class="n" id="r-n-feed">0</span></h4>
       <div class="feed" id="r-feed"></div>
     </section>
   </aside>
@@ -109,45 +109,45 @@
 
 <!-- ─────────────── panel técnico: la evidencia profunda ─────────────── -->
 <div class="scrim" id="scrim" hidden></div>
-<aside class="tech" id="tech" hidden aria-label="Detalles técnicos">
+<aside class="tech" id="tech" hidden aria-label="Technical details">
   <div class="tech-top">
     <div>
-      <h3>Detalles técnicos</h3>
+      <h3>Technical details</h3>
       <p id="tech-sub">—</p>
     </div>
-    <button class="iconbtn" id="btn-tech-close" type="button" aria-label="Cerrar">✕</button>
+    <button class="iconbtn" id="btn-tech-close" type="button" aria-label="Close">✕</button>
   </div>
 
   <div class="tech-chips" id="tech-chips"></div>
 
   <div class="tech-body">
     <details class="grp" open>
-      <summary>Procedencia y linaje <span class="n" id="n-prov"></span></summary>
+      <summary>Provenance & lineage <span class="n" id="n-prov"></span></summary>
       <div class="grp-body" id="g-prov"></div>
     </details>
 
     <details class="grp">
-      <summary>Objetos en Backblaze B2 <span class="n" id="n-objects">0</span></summary>
+      <summary>Objects in Backblaze B2 <span class="n" id="n-objects">0</span></summary>
       <div class="grp-body" id="g-objects"></div>
     </details>
 
     <details class="grp">
-      <summary>AgentLoop · juez de visión <span class="n" id="n-agent">0</span></summary>
+      <summary>AgentLoop · vision judge <span class="n" id="n-agent">0</span></summary>
       <div class="grp-body" id="g-agent"></div>
     </details>
 
     <details class="grp">
-      <summary>Escenas <span class="n" id="n-scenes"></span></summary>
+      <summary>Scenes <span class="n" id="n-scenes"></span></summary>
       <div class="grp-body" id="g-scenes"></div>
     </details>
 
     <details class="grp">
-      <summary>Eventos en vivo <span class="n" id="n-feed">0</span></summary>
+      <summary>Live events <span class="n" id="n-feed">0</span></summary>
       <div class="grp-body feed" id="g-feed"></div>
     </details>
 
     <details class="grp" id="grp-chaos">
-      <summary>Chaos engineering <span class="n">tecla k</span></summary>
+      <summary>Chaos engineering <span class="n">press k</span></summary>
       <div class="grp-body" id="g-chaos"></div>
     </details>
   </div>
@@ -157,6 +157,6 @@
 
 <script src="/vendor/hls.min.js"></script>
 <script src="/mse.js"></script>
-<script src="/app.js?v=13"></script>
+<script src="/app.js?v=14"></script>
 </body>
 </html>

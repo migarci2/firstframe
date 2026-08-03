@@ -21,20 +21,21 @@ var REDUCED = window.matchMedia &&
 
 /* ═════════════════════════ baraja ═════════════════════════ */
 
-// Catálogo real: briefs y tiempos leídos de los manifest.json de runs/demo-…
+// Real catalog: briefs and timings read from the manifest.json files in runs/demo-…
+// Briefs stay verbatim in Spanish: they are the exact input that produced each spot.
 var SPOTS = [
-  { img: '/assets/cafe.jpg',    t: 'Café de especialidad',
+  { img: '/assets/cafe.jpg',    t: 'Specialty coffee',
     b: 'una bolsa de cafe de especialidad de tueste artesanal, sobre madera oscura',
-    e: '3 escenas', ms: '43,7 s' },
-  { img: '/assets/sneaker.jpg', t: 'Zapatilla de running',
+    e: '3 scenes', ms: '43.7 s' },
+  { img: '/assets/sneaker.jpg', t: 'Running shoe',
     b: 'una zapatilla de running ligera de una marca nueva, sobre asfalto mojado',
-    e: '3 escenas', ms: '2:14' },
-  { img: '/assets/botella.jpg', t: 'Botella térmica',
+    e: '3 scenes', ms: '2:14' },
+  { img: '/assets/botella.jpg', t: 'Insulated bottle',
     b: 'una botella termica de acero inoxidable de una marca nueva, sin logotipos, sobre asfalto mojado de noche',
-    e: '3 escenas', ms: '44,3 s' },
-  { img: '/assets/serum.jpg',   t: 'Serum facial',
+    e: '3 scenes', ms: '44.3 s' },
+  { img: '/assets/serum.jpg',   t: 'Facial serum',
     b: 'un frasco de serum facial de una marca DTC, sobre marmol blanco, luz de manana',
-    e: '3 escenas', ms: '20,7 s' }
+    e: '3 scenes', ms: '20.7 s' }
 ];
 
 var deck = $('deck');
@@ -51,7 +52,7 @@ function buildDeck() {
 
     var im = document.createElement('img');
     im.src = s.img;
-    im.alt = 'Fotograma generado: ' + s.t;
+    im.alt = 'Generated frame: ' + s.t;
     im.draggable = false;
     c.appendChild(im);
 

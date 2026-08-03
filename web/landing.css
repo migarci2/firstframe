@@ -325,7 +325,7 @@ h1, h2, h3, .display {
   pointer-events: none;
   z-index: 0;
 }
-.orb {
+.orb { display: none;
   position: absolute;
   right: -9vw;
   top: 16vh;
@@ -339,7 +339,7 @@ h1, h2, h3, .display {
 }
 /* Sólo el texto sube de capa: el orbe y el numeral siguen siendo absolutos. */
 .statement > .label, .statement > .big { position: relative; z-index: 1; }
-@media (max-width: 860px) { .orb { display: none; } }
+@media (max-width: 860px) { .orb { display: none; display: none; } }
 
 /* ───────────────────────── catálogo + baraja ───────────────────────── */
 
@@ -521,3 +521,47 @@ h1, h2, h3, .display {
 .motion .reveal.d1 { transition-delay: .08s; }
 .motion .reveal.d2 { transition-delay: .16s; }
 .motion .reveal.d3 { transition-delay: .24s; }
+
+/* ───────────────────────── product shot ─────────────────────────
+   La regla del sistema es explícita: nada de fotografía de stock, el producto
+   es la imagen. La captura va enmarcada con el anillo de 1px del sistema. */
+
+.shotframe { margin: 40px 0 0; }
+.shotframe img {
+  width: 100%;
+  border-radius: 16px;
+  box-shadow: rgba(255,255,255,.05) 0 1px 0 0 inset,
+              rgba(255,255,255,.10) 0 0 0 1px,
+              rgba(0,0,0,.2) 0 -1px 0 0 inset;
+}
+.shotframe figcaption {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--ink-3);
+  letter-spacing: .008em;
+}
+
+.statement .lede {
+  margin: 32px 0 0;
+  max-width: 62ch;
+  font-size: 16px;
+  color: var(--ink-2);
+  position: relative; z-index: 1;
+}
+
+/* ───────────────────────── footer ─────────────────────────
+   Tira de metadatos en monoespaciada separada por pipes: el sistema usa esto
+   para decir "esto es información técnica" sin necesidad de una etiqueta. */
+
+.foot { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--hair); }
+.foot-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  font-family: var(--mono);
+  font-size: 12px; letter-spacing: .017em;
+  color: var(--ink-3);
+}
+.foot-meta i { font-style: normal; color: var(--ink-3); opacity: .5; }
+.foot-note {
+  margin: 16px 0 0;
+  font-size: 12px; color: var(--ink-3); max-width: 60ch; line-height: 1.6;
+}
