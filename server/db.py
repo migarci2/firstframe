@@ -156,8 +156,13 @@ def _migrate() -> None:
         # Los spots que ya existian caen en el proyecto por defecto.
         conn().execute("UPDATE jobs SET project=? WHERE project IS NULL OR project=''",
                        (DEFAULT_PROJECT,))
-        conn().execute("INSERT OR IGNORE INTO projects(name,created_at) VALUES(?,?)",
-                       (DEFAULT_PROJECT, now_ms()))
+        # El proyecto por defecto solo se crea cuando NO hay ninguno: antes se
+        # insertaba en cada arranque y resucitaba un proyecto que el usuario acababa
+        # de borrar, con lo que la rejilla se llenaba sola de carpetas vacias.
+        n = conn().execute("SELECT COUNT(*) AS c FROM projects").fetchone()["c"]
+        if not n:
+            conn().execute("INSERT OR IGNORE INTO projects(name,created_at) VALUES(?,?)",
+                           (DEFAULT_PROJECT, now_ms()))
         conn().commit()
     except Exception as e:      # noqa: BLE001 — una DB vieja no puede tumbar el server
         print(f"[db] WARN migracion parcial: {e!r}")

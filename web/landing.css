@@ -64,6 +64,11 @@
    * ancha y con menos margen, porque a 640 px una interfaz no se lee. */
   --pad-wide: clamp(16px, 3vw, 40px);
   --max-wide: 1520px;
+
+  /* El escenario del recorrido: 220px es lo que ocupan la barra fija, las
+   * marcas, la frase y los huecos; lo que sobra del alto es la captura, y de
+   * ahí sale su ancho. La entrada usa la misma caja para arrancar alineada. */
+  --stage: min(var(--max-wide), calc((100vh - 220px) * 1.6 + var(--pad-wide) * 2));
 }
 
 * { box-sizing: border-box; }
@@ -393,6 +398,8 @@ h2 {
  * escalonada y atada al scroll (--q1/--q2), no con un disparo de una vez. */
 
 .lead { padding: clamp(90px, 11vw, 150px) 0 clamp(18px, 2.4vw, 34px); }
+/* Misma caja que el recorrido: los dos bloques arrancan en la misma vertical. */
+.lead .wrap { max-width: var(--stage); }
 .lead-h {
   font-size: clamp(30px, 4.4vw, 52px);
   max-width: 22ch;
@@ -425,9 +432,7 @@ h2 {
 .flow-sticky .flow-grid {
   display: flex; flex-direction: column;
   gap: clamp(14px, 1.8vh, 24px);
-  /* 220px es lo que ocupan la barra fija, las marcas, la frase y los huecos:
-   * lo que sobra es el alto de la captura, y de ahí sale su ancho. */
-  max-width: min(var(--max-wide), calc((100vh - 220px) * 1.6 + var(--pad-wide) * 2));
+  max-width: var(--stage);
 }
 
 /* Cuatro marcas, sin números: la activa se rellena con el scroll dentro de su
@@ -543,6 +548,7 @@ h2 {
 .flow.flow-flat { height: auto; }
 .flow-flat .flow-sticky { position: static; height: auto; padding: 20px 0 50px; }
 .flow-flat .flow-sticky .flow-grid { gap: clamp(28px, 4vw, 48px); max-width: var(--max-wide); }
+.flow-flat ~ * .lead .wrap { max-width: var(--max-wide); }
 .flow-flat .flow-ticks { display: none; }
 .flow-flat .flow-lines, .flow-flat .flow-stack { display: contents; }
 .flow-flat .shot {

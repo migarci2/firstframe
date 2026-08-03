@@ -3,8 +3,15 @@
 Guion **ejecutable**: cada tramo dice qué se ve, qué se dice, qué se pulsa y cuánto dura.
 Nada de improvisar delante de la cámara.
 
-Todos los números de aquí están **medidos hoy (2026-08-03)** con la configuración de
-`demo/run_demo.sh` (`DEMO_MODE=mock JUDGE_THRESHOLD=0 EVENTS_MODE=off HLS_SERVE_FROM=local`),
+> **ACTUALIZADO 2026-08-03 18:55.** Se graba contra **producción**, no contra localhost:
+> `https://firstframe.migarci2.dev`, código de acceso **`FIRSTFRAME`**. Ahí el pipeline de
+> Genblaze corre de verdad (en local `run_demo.sh` fuerza mock y sale carta de ajuste), los
+> datos están en inglés y la barra de direcciones juega a favor. La app tiene ahora muro de
+> acceso, vista de proyectos y paneles con nombre (`PROJECT` / `MONITOR` / `TIMELINE` /
+> `INSPECTOR`): los tramos de abajo que hablen de la disposición vieja hay que releerlos
+> mirando la pantalla, no de memoria.
+
+Todos los números de aquí están **medidos** con la app real,
 no estimados. Si al ensayar te salen otros, manda el que salga: los números en pantalla los
 pinta la app sola, no los pones tú.
 
@@ -15,21 +22,27 @@ pinta la app sola, no los pones tú.
 
 ## 0. Antes de darle a REC (5 minutos, fuera de cámara)
 
+Se graba contra producción, así que no hay que levantar nada. Comprueba:
+
 ```bash
-cd ~/Escritorio/Projects/genblaze-hackathon
-bash demo/run_demo.sh --reset        # ~50 s: limpia, arranca y siembra 2 jobs
+curl -s https://firstframe.migarci2.dev/api/health   # ok:true, mode:free, b2:true
 ```
 
-Comprueba, en este orden:
+Y en el navegador, **en una ventana de incógnito** (para pasar por el muro como un juez):
 
-1. La consola termina en `[run] ABRE http://localhost:8000` **sin** la línea
-   `AVISO: B2 sin cuota` → si aparece ese aviso, el badge de Object Lock del tramo 5
-   **no va a salir**. Ver «Fuera del guion».
-2. `[seed] ... aprobado — lock={...}` con un `retain_until` de verdad. Si dice
-   `PENDIENTE`, repite `bash demo/run_demo.sh --reset` dentro de unos minutos.
-3. Abre `http://localhost:8000`: dos jobs en la columna izquierda, uno `APPROVED` y uno
-   `IN REVIEW`, y el player reproduciendo. Consola del navegador **sin errores**.
-4. Ventana del navegador a **1440×900** y sin barra de marcadores. El zoom al 100 %.
+1. Abre `https://firstframe.migarci2.dev` → sale la pantalla de acceso.
+2. Código **`FIRSTFRAME`** → aterrizas en la **vista de proyectos**, con
+   `Aeron SS26` y `Nova Q3` y un spot ya aprobado.
+3. Abre un proyecto → el editor con los cuatro paneles y el vídeo reproduciendo.
+
+Comprueba además, en este orden:
+
+1. El spot aprobado enseña el badge de **Object Lock GOVERNANCE** con su fecha. Si no
+   está, aprueba otro spot antes de grabar: es el momento fuerte del tramo 5.
+2. Consola del navegador **sin errores**.
+3. Ventana a **1440×900** y sin barra de marcadores. Zoom al 100 %.
+4. Cierra el panel técnico (**Hide panel**) para los planos donde manda el vídeo, y ábrelo
+   sólo en el tramo 5, que es donde la evidencia es el argumento.
 5. Ten preparado en un segundo escritorio: `PLAN.md §3` (layout del bucket) o el diagrama
    de arquitectura para el tramo 6.
 

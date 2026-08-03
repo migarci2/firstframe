@@ -347,6 +347,18 @@ def concat_master(job_id: str, out_path: str | Path) -> Path:
     """Une todos los segmentos en un mp4 unico (para approve / final.mp4)."""
     from server import db
 
+    # Si el revisor edito el montaje en el timeline (reordenar, recortar, saltar
+    # escenas), el master aprobado tiene que ser SU corte, no el orden natural.
+    # Sin esto la edicion seria cosmetica: se ve en pantalla y se pierde al aprobar.
+    try:
+        from server import editor
+
+        plan = editor.cut_plan(job_id)
+        if plan["ready"] and editor.is_edited(job_id):
+            return _concat_cut(job_id, plan, out_path)
+    except Exception as e:                      # noqa: BLE001
+        print(f"[assembler] WARN corte editado no aplicable ({e!r}); uso orden natural")
+
     # la cabecera (scene 0) es andamiaje del preview: fuera del master aprobado
     segs = [s for s in db.segments(job_id) if s["scene"] != 0]
     if not segs:

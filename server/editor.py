@@ -164,6 +164,27 @@ def get_edl(job_id: str) -> list[dict]:
     return normalize(stored, scenes)
 
 
+def is_edited(job_id: str) -> bool:
+    """¿El revisor tocó el montaje, o sigue siendo el orden natural?
+
+    `server/assembler.py:concat_master()` lo consulta antes de aprobar: si nadie
+    editó, concatena los segmentos tal cual (rápido, `-c copy`); si hay corte, lo
+    materializa. Comparar contra el montaje natural en vez de mirar si existe fila
+    en `edls` evita que un guardado que no cambió nada dispare un re-encode.
+    """
+    _ensure()
+    scenes = db.scenes(job_id)
+    natural = [{"n": int(s["n"]), "in": 0.0, "out": None, "enabled": True} for s in scenes]
+    current = get_edl(job_id)
+    if len(current) != len(natural):
+        return True
+    for a, b in zip(current, natural):
+        if (a["n"] != b["n"] or a.get("enabled", True) is not True
+                or float(a.get("in") or 0.0) != 0.0 or a.get("out") is not None):
+            return True
+    return False
+
+
 def put_edl(job_id: str, edl: list) -> list[dict]:
     _ensure()
     clean = normalize(edl, db.scenes(job_id))

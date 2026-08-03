@@ -73,13 +73,39 @@ TABLES_BY_JOB = ("scenes", "decisions", "provider_events", "segments", "events")
 
 
 # ------------------------------------------------------------------ HTTP
+# La instancia va detrás de un código de acceso (server/auth.py). El sembrado entra
+# por la MISMA puerta que un juez —POST /api/access— en vez de saltársela: si el muro
+# se rompe, el sembrado se entera aquí y no en la demo.
+_COOKIE: str | None = None
+
+
 def _req(url: str, method: str = "GET", body: dict | None = None, timeout: float = 30.0):
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method,
-                                 headers={"content-type": "application/json"})
+    headers = {"content-type": "application/json"}
+    if _COOKIE:
+        headers["cookie"] = _COOKIE
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read()
         return r.status, (json.loads(raw) if raw else {})
+
+
+def login(base: str) -> None:
+    global _COOKIE
+    code = os.getenv("DEMO_ACCESS_CODE", "FIRSTFRAME")
+    if not code.strip():
+        return                                  # muro desactivado: nada que hacer
+    req = urllib.request.Request(f"{base}/api/access", data=json.dumps({"code": code}).encode(),
+                                 method="POST", headers={"content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = r.headers.get("set-cookie") or ""
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"[seed] el codigo de acceso no vale (HTTP {e.code}). "
+                         f"Revisa DEMO_ACCESS_CODE.")
+    _COOKIE = raw.split(";", 1)[0]
+    if not _COOKIE:
+        raise SystemExit("[seed] /api/access no devolvio cookie")
 
 
 def wait_for_server(base: str, timeout: float = 60.0) -> dict:
@@ -261,6 +287,7 @@ def main() -> int:
         return 0
 
     h = wait_for_server(base)
+    login(base)
     if h.get("degraded"):
         print(f"[seed] AVISO B2 degradado: {h.get('warning')}")
     made = seed(base, force=args.reset)

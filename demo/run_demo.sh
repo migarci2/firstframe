@@ -129,5 +129,6 @@ if h.get("degraded"):
 ' "$HEALTH"
 echo
 echo "[run] ABRE  ${URL}"
+echo "[run] codigo de acceso: ${DEMO_ACCESS_CODE:-FIRSTFRAME}   (env DEMO_ACCESS_CODE; vacio = sin muro)"
 echo "[run] guion ${ROOT}/demo/GUION.md"
 echo "[run] parar: kill $SRV     log: tail -f ${LOG}"
