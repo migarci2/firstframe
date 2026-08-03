@@ -158,7 +158,7 @@ var els = {
   img: $('ph-img'), duo: $('ph-duo'),
   pl: $('p-l'), pr: $('p-r'),
   da: $('dot-a'), db: $('dot-b'),
-  title: $('ptitle'), t1: $('t1'), t2: $('t2'),
+  title: $('ptitle'), t1: $('t1'), t2: $('t2'), atmo: $('atmo'),
   orb: $('orb')
 };
 
@@ -176,7 +176,9 @@ function drawPortal() {
   // La imagen se asienta de un ligero sobreescalado a 1.
   var pImg = clamp01(p / 0.85);
   els.img.style.transform = 'scale(' + lerp(1.12, 1, pImg) + ')';
-  els.duo.style.opacity = String(lerp(0, 0.34, clamp01(p / 0.6)));
+  els.duo.style.opacity = String(lerp(0, 0.14, clamp01(p / 0.6)));
+  // La atmósfera se disuelve y deja el fotograma. Ligado al scroll: reversible.
+  if (els.atmo) els.atmo.style.opacity = String(1 - clamp01(p / 0.62));
 
   // Crece Y aprieta a la vez: es lo que hace que se lea como un título que se
   // abre y no como un zoom. Los extremos viajan media anchura hacia fuera.

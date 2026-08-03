@@ -1186,6 +1186,12 @@ function start() {
 
   $('btn-create').addEventListener('click', createSpot);
   $('btn-new').addEventListener('click', showCompose);
+  // El raíl se puede cerrar para que el plano respire al grabar.
+  $('btn-rail').addEventListener('click', function () {
+    var hid = document.body.classList.toggle('no-rail');
+    this.textContent = hid ? 'Mostrar raíl' : 'Ocultar raíl';
+    this.setAttribute('aria-expanded', hid ? 'false' : 'true');
+  });
   $('btn-tech').addEventListener('click', function () { toggleTech(); });
   $('btn-tech-close').addEventListener('click', function () { toggleTech(false); });
   $('scrim').addEventListener('click', function () { toggleTech(false); });

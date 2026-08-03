@@ -83,7 +83,7 @@ button { cursor: pointer; }
 
 .top {
   height: 56px;
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 0 24px;
   border-bottom: 1px solid var(--border);
 }
@@ -526,3 +526,7 @@ button { cursor: pointer; }
 .rblock-feed .feed { flex: 1; min-height: 120px; max-height: none; overflow-y: auto; }
 .rblock-feed .feedrow .t { flex: 0 0 48px; }
 .rblock-feed .feedrow .k { flex: 0 0 96px; }
+
+/* El raíl se cierra desde la cabecera: el jurado ve la evidencia y quien graba
+   puede dejar el plano a ancho completo. */
+body.no-rail .rail { display: none; }
