@@ -1,0 +1,76 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FirstFrame — thumbnail</title>
+<style>
+  /* Miniatura 1280x720 para YouTube/Devpost. Se captura a 2x -> 2560x1440.
+     Mismo sistema que la landing: Inter, lienzo #08090a, coral solo como acento. */
+  @font-face {
+    font-family: 'Inter';
+    src: url('../web/vendor/fonts/inter-latin.woff2') format('woff2');
+    font-weight: 100 900; font-display: block;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: #08090a;
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    color: #f4f4f5;
+    display: flex; flex-direction: column;
+    justify-content: center;
+    padding: 0 96px 118px;
+    position: relative;
+  }
+  /* Halo radial: muere en transparente, sin arista que recortar. */
+  .glow {
+    position: absolute; inset: -20%;
+    background: radial-gradient(ellipse 44% 40% at 34% 46%,
+                rgba(255,107,94,.28), transparent 68%);
+    pointer-events: none;
+  }
+  .mark { display: flex; align-items: center; gap: 16px; margin-bottom: 40px; }
+  .mark svg { width: 42px; height: 42px; display: block; }
+  .mark span {
+    font-size: 30px; font-weight: 600; letter-spacing: -.018em;
+  }
+  h1 {
+    font-size: 76px; line-height: 1.06; font-weight: 640;
+    letter-spacing: -.034em; max-width: 13.5em;
+  }
+  h1 em { font-style: normal; color: #ff6b5e; }
+  p {
+    margin-top: 28px; font-size: 26px; line-height: 1.45;
+    color: #9ba1a8; max-width: 24em; letter-spacing: -.008em;
+  }
+  /* Pie: la prueba, en monoespaciada y discreta. No compite con el titular. */
+  .foot {
+    position: absolute; left: 96px; right: 96px; bottom: 52px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font: 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .1em; text-transform: uppercase; color: #6b7178;
+    border-top: 1px solid rgba(255,255,255,.09); padding-top: 22px;
+  }
+  .foot b { color: #f4f4f5; font-weight: 500; }
+</style>
+
+<div class="glow"></div>
+
+<div class="mark">
+  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#FF6B5E">
+      <rect x="2" y="4" width="7" height="16" rx="1.4"/>
+      <rect x="11.4" y="4" width="3.6" height="16" rx="1" opacity=".62"/>
+      <rect x="16.9" y="4" width="2.2" height="16" rx=".8" opacity=".34"/>
+      <rect x="20.6" y="4" width="1.4" height="16" rx=".6" opacity=".18"/>
+    </g>
+  </svg>
+  <span>FirstFrame</span>
+</div>
+
+<h1>Watch the spot before<br>it <em>finishes rendering</em>.</h1>
+
+<p>A review room for generative video, built on Genblaze and Backblaze B2.</p>
+
+<div class="foot">
+  <span>First frame <b>9.3s</b> &nbsp;·&nbsp; Full render <b>65.7s</b></span>
+  <span>Backblaze Generative Media Hackathon</span>
+</div>
