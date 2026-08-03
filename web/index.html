@@ -8,7 +8,7 @@
      (?v=) y el documento pide no cachearse. -->
 <meta http-equiv="Cache-Control" content="no-store">
 <title>FirstFrame</title>
-<link rel="stylesheet" href="/styles.css?v=18">
+<link rel="stylesheet" href="/styles.css?v=19">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -27,6 +27,8 @@
     <span>FirstFrame</span>
   </div>
   <div class="crumb">
+    <button class="crumb-root" id="crumb-home" type="button">Projects</button>
+    <span class="crumb-s" aria-hidden="true">/</span>
     <span class="crumb-p" id="crumb-project">—</span>
     <span class="crumb-s" aria-hidden="true">—</span>
     <span class="crumb-j" id="crumb-spot">no spot open</span>
@@ -34,7 +36,32 @@
   <span class="grow"></span>
   <button class="linkbtn" id="btn-rail" type="button" aria-expanded="true">Inspector</button>
   <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Technical details</button>
+  <button class="linkbtn" id="btn-signout" type="button">Sign out</button>
 </header>
+
+<!-- ─────────────── HOME: la rejilla de proyectos ───────────────
+     Al entrar no se cae dentro de un spot: se ve el trabajo que hay, como en
+     cualquier herramienta con la que se trabaja todos los días. -->
+<main class="home" id="view-home" hidden>
+  <div class="home-in">
+    <div class="home-head">
+      <div>
+        <h1>Projects</h1>
+        <p class="home-sub" id="home-sub">—</p>
+      </div>
+      <button class="primary" id="btn-home-new" type="button">New project</button>
+    </div>
+
+    <form class="home-new" id="home-new" hidden>
+      <input id="home-new-name" type="text" placeholder="Project name" maxlength="64"
+             spellcheck="false" autocomplete="off">
+      <button class="primary" type="submit">Create</button>
+      <button class="ghost" type="button" id="home-new-cancel">Cancel</button>
+    </form>
+
+    <div class="cards" id="home-cards"></div>
+  </div>
+</main>
 
 <div class="shell">
 
@@ -102,12 +129,25 @@
           <div class="stagebar">
             <div class="stageinfo">
               <p class="stagekicker" id="spot-kicker"></p>
-              <h2 id="spot-title">—</h2>
+              <h2 id="spot-title" title="Double-click to rename">—</h2>
               <p class="say" id="spot-line">—</p>
+              <div class="spottools" id="spot-tools"></div>
             </div>
             <div class="stageact" id="stage-actions"></div>
           </div>
         </section>
+
+        <!-- corregir el brief y, si se quiere, volver a generar con él -->
+        <div class="changes" id="briefedit" hidden>
+          <label for="brief-edit">Brief</label>
+          <textarea id="brief-edit" rows="3" spellcheck="false"></textarea>
+          <div class="changes-row">
+            <span class="grow"></span>
+            <button class="ghost" id="btn-brief-cancel" type="button">Cancel</button>
+            <button class="ghost" id="btn-brief-save" type="button">Save</button>
+            <button class="primary" id="btn-brief-regen" type="button">Save and regenerate</button>
+          </div>
+        </div>
 
         <!-- pedir cambios: sobre el monitor, como un popover de herramienta -->
         <div class="changes" id="changes" hidden>
@@ -222,6 +262,6 @@
 
 <script src="/vendor/hls.min.js"></script>
 <script src="/mse.js"></script>
-<script src="/app.js?v=17"></script>
+<script src="/app.js?v=18"></script>
 </body>
 </html>

@@ -358,6 +358,270 @@ var Player = {
   }
 };
 
+/* ═════════════════════════ HOME: los proyectos ═════════════════════════
+ * Entrar en una herramienta de trabajo es ver el trabajo que hay, no caer
+ * dentro del último archivo que alguien abrió. De aquí se sale abriendo un
+ * proyecto; el editor (PROJECT/MONITOR/TIMELINE/INSPECTOR) es lo de dentro. */
+
+function showHome() {
+  S.view = 'home';
+  S.sel = null;
+  Player.teardown();
+  document.body.classList.add('home');
+  $('view-home').hidden = false;
+  $('changes').hidden = true;
+  $('briefedit').hidden = true;
+  setHash('');
+  renderHome();
+  renderCrumb();
+}
+
+function openProject(name, opts) {
+  opts = opts || {};
+  S.project = name;
+  S.folded[name] = false;
+  S.view = 'compose';
+  document.body.classList.remove('home');
+  $('view-home').hidden = true;
+  setHash('p/' + encodeURIComponent(name));
+
+  var mine = jobsOf(name);
+  if (opts.compose || !mine.length) showCompose();
+  else select(mine[0].id);
+  renderJobs();
+  renderProjectPicker();
+  renderCrumb();
+}
+
+// Lo que la rejilla sabe de un proyecto sale de los spots que hay en memoria:
+// así una miniatura o un estado cambian en el momento, sin esperar al servidor.
+function projectMeta(name) {
+  var row = null;
+  for (var i = 0; i < S.projects.length; i++) {
+    if (S.projects[i].name === name) { row = S.projects[i]; break; }
+  }
+  var mine = jobsOf(name);
+  var last = mine.length ? mine[0] : null;
+  return {
+    name: name,
+    spots: mine.length,
+    last: last,
+    at: last ? last.created_at : (row ? (row.updated_at || row.created_at) : 0)
+  };
+}
+
+function renderHome() {
+  var box = $('home-cards');
+  if (!box) return;
+  clear(box);
+
+  var names = allProjects();
+  var n = names.length, s = S.jobs.length;
+  $('home-sub').textContent = n + (n === 1 ? ' project' : ' projects') + ' · ' +
+                              s + (s === 1 ? ' spot' : ' spots');
+  names.forEach(function (name) { box.appendChild(projectCard(name)); });
+}
+
+function projectCard(name) {
+  var m = projectMeta(name);
+  var card = el('article', 'card');
+
+  // No es un <button>: dentro va a vivir el campo de renombrar, y un input
+  // dentro de un botón ni es HTML válido ni recibe el foco.
+  var open = el('div', 'card-open');
+  open.tabIndex = 0;
+  open.setAttribute('role', 'button');
+
+  var th = el('div', 'card-thumb');
+  if (m.last) {
+    var img = el('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.addEventListener('error', function () {
+      if (img.parentNode) th.removeChild(img);
+      th.classList.add('empty');
+      th.appendChild(document.createTextNode('No preview yet'));
+    });
+    img.src = '/api/jobs/' + m.last.id + '/poster.jpg';
+    th.appendChild(img);
+  } else {
+    th.classList.add('empty');
+    th.appendChild(document.createTextNode('No spots yet'));
+  }
+  open.appendChild(th);
+
+  var body = el('div', 'card-body');
+  var h = el('h3', 'card-name', name);
+  body.appendChild(h);
+  body.appendChild(el('p', 'card-meta',
+    m.spots + (m.spots === 1 ? ' spot' : ' spots') + (m.at ? ' · ' + humanDate(m.at) : '')));
+  if (m.last) {
+    var st = statusOf(m.last);
+    body.appendChild(el('span', 'card-status t-' + st.tone, st.label));
+  } else {
+    body.appendChild(el('span', 'card-status', 'Ready for your first brief'));
+  }
+  open.appendChild(body);
+
+  function go() { openProject(name); }
+  open.addEventListener('click', function (e) {
+    if (e.target.tagName === 'INPUT') return;      // renombrando: no navegar
+    go();
+  });
+  open.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+  });
+  card.appendChild(open);
+
+  var acts = el('div', 'card-acts');
+  var ren = el('button', null, 'Rename');
+  ren.type = 'button';
+  ren.addEventListener('click', function (e) { e.stopPropagation(); renameProject(h, name); });
+  acts.appendChild(ren);
+  var del = el('button', 'danger', 'Delete');
+  del.type = 'button';
+  del.addEventListener('click', function (e) {
+    e.stopPropagation();
+    confirmIn(card, m.spots
+      ? 'Delete “' + name + '” and its ' + m.spots + (m.spots === 1 ? ' spot' : ' spots') + '?'
+      : 'Delete “' + name + '”?',
+      function () { doDeleteProject(name); });
+  });
+  acts.appendChild(del);
+  card.appendChild(acts);
+
+  return card;
+}
+
+/* Confirmar donde está la cosa que se va a borrar, no en un alert del navegador. */
+function confirmIn(card, text, onYes) {
+  var old = card.querySelector('.confirm');
+  if (old) card.removeChild(old);
+  var box = el('div', 'confirm');
+  box.appendChild(el('p', null, text));
+  var row = el('div', 'confirm-row');
+  var no = el('button', null, 'Cancel');
+  no.type = 'button';
+  no.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (box.parentNode) box.parentNode.removeChild(box);
+  });
+  var yes = el('button', 'danger', 'Delete');
+  yes.type = 'button';
+  yes.addEventListener('click', function (e) {
+    e.stopPropagation();
+    yes.disabled = true;
+    onYes();
+  });
+  row.appendChild(no);
+  row.appendChild(yes);
+  box.appendChild(row);
+  box.addEventListener('click', function (e) { e.stopPropagation(); });
+  card.appendChild(box);
+}
+
+/* Renombrar en línea: el nombre se convierte en campo y vuelve a ser nombre. */
+function renameProject(h, name) {
+  var inp = el('input', 'card-edit');
+  inp.type = 'text';
+  inp.value = name;
+  inp.maxLength = 64;
+  inp.spellcheck = false;
+  h.parentNode.replaceChild(inp, h);
+  inp.focus();
+  inp.select();
+
+  var done = false;
+  function finish(save) {
+    if (done) return;
+    done = true;
+    var v = inp.value.trim();
+    if (!save || !v || v === name) { renderHome(); return; }
+
+    api('/api/projects/' + encodeURIComponent(name), { method: 'PATCH', body: { name: v } })
+      .then(function (d) {
+        var got = (d && d.project && d.project.name) || v;
+        // Reflejo local inmediato: la rejilla no se queda esperando al servidor.
+        S.jobs.forEach(function (j) { if (projectOf(j) === name) j.project = got; });
+        S.projects.forEach(function (p) { if (p.name === name) p.name = got; });
+        if (S.project === name) S.project = got;
+        if (S.folded[name] != null) { S.folded[got] = S.folded[name]; delete S.folded[name]; }
+        renderHome();
+        renderJobs();
+        renderProjectPicker();
+        renderCrumb();
+        loadProjects();
+      })
+      .catch(function (e) {
+        toast('bad', e.status === 409
+          ? 'Another project already uses that name.'
+          : 'The project could not be renamed.', null, 8000);
+        pushFeed('error', null, 'PATCH /api/projects: ' + e.message,
+                 'the project could not be renamed');
+        renderHome();
+      });
+  }
+  inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  inp.addEventListener('blur', function () { finish(true); });
+}
+
+function doDeleteProject(name) {
+  api('/api/projects/' + encodeURIComponent(name), { method: 'DELETE' })
+    .then(function () {
+      S.jobs = S.jobs.filter(function (j) { return projectOf(j) !== name; });
+      S.projects = S.projects.filter(function (p) { return p.name !== name; });
+      if (S.project === name) S.project = null;
+      renderHome();
+      renderJobs();
+      renderProjectPicker();
+      loadProjects();
+      toast('', 'Project deleted.', null, 6000);
+    })
+    .catch(function (e) {
+      toast('bad', 'The project could not be deleted.', null, 8000);
+      pushFeed('error', null, 'DELETE /api/projects: ' + e.message,
+               'the project could not be deleted');
+      renderHome();
+    });
+}
+
+function submitHomeProject(e) {
+  if (e) e.preventDefault();
+  var name = $('home-new-name').value.trim();
+  $('home-new').hidden = true;
+  if (!name) return;
+  api('/api/projects', { method: 'POST', body: { name: name } })
+    .then(function () {
+      return loadProjects().then(function () { openProject(name, { compose: true }); });
+    })
+    .catch(function (e2) {
+      toast('bad', 'The project could not be created.', null, 8000);
+      pushFeed('error', null, 'POST /api/projects: ' + e2.message,
+               'the project could not be saved');
+    });
+}
+
+/* ═════════════════════ ruta en el hash ═════════════════════
+ * Recargar no debería devolverte al principio. El hash guarda el proyecto
+ * abierto; sin router, sin dependencias. */
+
+function setHash(h) {
+  var want = h ? '#/' + h : '';
+  if (location.hash === want || (!location.hash && !want)) return;
+  try { history.replaceState(null, '', location.pathname + location.search + want); }
+  catch (e) { location.hash = want; }
+}
+
+function readHash() {
+  var m = /^#\/p\/(.+)$/.exec(location.hash || '');
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch (e) { return null; }
+}
+
 /* ═════════════════════════════ vistas ═════════════════════════════ */
 
 function showCompose() {
@@ -367,6 +631,7 @@ function showCompose() {
   $('view-compose').hidden = false;
   $('view-spot').hidden = true;
   $('changes').hidden = true;
+  $('briefedit').hidden = true;
   renderJobs();
   renderProjectPicker();
   renderCrumb();
@@ -386,7 +651,7 @@ function select(id, opts) {
 
   $('view-compose').hidden = true;
   $('view-spot').hidden = false;
-  if (changed) $('changes').hidden = true;
+  if (changed) { $('changes').hidden = true; $('briefedit').hidden = true; }
 
   if (changed || opts.force) Player.load(job);
   // Abrir un spot deja su proyecto como activo y desplegado: la cabecera y el
@@ -542,6 +807,7 @@ function loadProjects() {
     renderJobs();
     renderProjectPicker();
     renderCrumb();
+    if (S.view === 'home') renderHome();
   }).catch(function () {});
 }
 
@@ -571,7 +837,200 @@ function renderStage() {
   renderCrumb();
   renderTimeline();
   renderActions(job);
+  renderSpotTools(job);
   renderNoteScenes(job);
+}
+
+/* ═════════════════ el spot también se edita ═════════════════
+ * Renombrar, corregir el brief, moverlo de proyecto y tirarlo. Debajo del
+ * título, en gris: están cuando hacen falta y no compiten con Approve. */
+
+function renderSpotTools(job) {
+  var box = $('spot-tools');
+  if (!box) return;
+  clear(box);
+
+  function act(label, cls, fn) {
+    var b = el('button', cls || null, label);
+    b.type = 'button';
+    b.addEventListener('click', fn);
+    box.appendChild(b);
+    return b;
+  }
+
+  act('Rename', null, function () { renameSpot(job); });
+  act('Edit brief', null, openBriefEdit);
+
+  box.appendChild(el('span', 'sep', 'in'));
+  var sel = el('select');
+  sel.setAttribute('aria-label', 'Move to another project');
+  allProjects().forEach(function (n) {
+    var o = el('option', null, n);
+    o.value = n;
+    sel.appendChild(o);
+  });
+  sel.value = projectOf(job);
+  sel.addEventListener('change', function () { moveSpot(job, this.value); });
+  box.appendChild(sel);
+
+  act('Delete', 'danger', function () { askDeleteSpot(job); });
+}
+
+function renameSpot(job) {
+  var h = $('spot-title');
+  if (!h || h.hidden) return;
+  var inp = el('input', 'titleedit');
+  inp.type = 'text';
+  inp.value = job.title || spotTitle(job);
+  inp.maxLength = 120;
+  inp.spellcheck = false;
+  h.hidden = true;
+  h.parentNode.insertBefore(inp, h.nextSibling);
+  inp.focus();
+  inp.select();
+
+  var done = false;
+  function finish(save) {
+    if (done) return;
+    done = true;
+    var v = inp.value.trim();
+    if (inp.parentNode) inp.parentNode.removeChild(inp);
+    h.hidden = false;
+    if (!save || !v || v === (job.title || '')) return;
+
+    job.title = v;                       // optimista: el árbol y la barra ya lo dicen
+    renderStage();
+    renderJobs();
+    api('/api/jobs/' + job.id, { method: 'PATCH', body: { title: v } })
+      .then(function (d) { if (d.job) upsertJob(d.job); })
+      .catch(function (e) {
+        toast('bad', 'The name could not be saved.', null, 8000);
+        pushFeed('error', job.id, 'PATCH /api/jobs: ' + e.message,
+                 'the name could not be saved');
+      });
+  }
+  inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  inp.addEventListener('blur', function () { finish(true); });
+}
+
+function moveSpot(job, name) {
+  if (!name || name === projectOf(job)) return;
+  api('/api/jobs/' + job.id, { method: 'PATCH', body: { project: name } })
+    .then(function (d) {
+      if (d.job) upsertJob(d.job);
+      S.project = name;
+      S.folded[name] = false;
+      setHash('p/' + encodeURIComponent(name));
+      renderJobs();
+      renderProjectPicker();
+      renderCrumb();
+      loadProjects();
+      toast('', 'Moved to “' + name + '”.', null, 6000);
+    })
+    .catch(function (e) {
+      toast('bad', 'The spot could not be moved.', null, 8000);
+      pushFeed('error', job.id, 'PATCH /api/jobs: ' + e.message,
+               'the spot could not be moved');
+      renderSpotTools(job);
+    });
+}
+
+function askDeleteSpot(job) {
+  var box = $('spot-tools');
+  clear(box);
+  box.appendChild(el('span', 'sep', 'Delete this spot and everything generated for it?'));
+  var no = el('button', null, 'Cancel');
+  no.type = 'button';
+  no.addEventListener('click', function () { renderSpotTools(job); });
+  box.appendChild(no);
+  var yes = el('button', 'danger', 'Delete');
+  yes.type = 'button';
+  yes.addEventListener('click', function () {
+    yes.disabled = true;
+    api('/api/jobs/' + job.id, { method: 'DELETE' })
+      .then(function () { dropJob(job.id); toast('', 'Spot deleted.', null, 6000); })
+      .catch(function (e) {
+        toast('bad', 'The spot could not be deleted.', null, 8000);
+        pushFeed('error', job.id, 'DELETE /api/jobs: ' + e.message,
+                 'the spot could not be deleted');
+        renderSpotTools(job);
+      });
+  });
+  box.appendChild(yes);
+}
+
+// Quitar un spot del estado local y dejar la vista en un sitio sensato.
+function dropJob(id) {
+  var was = S.project;
+  S.jobs = S.jobs.filter(function (j) { return j.id !== id; });
+  delete S.segs[id];
+  delete S.iters[id];
+  if (S.sel === id) {
+    S.sel = null;
+    if (S.view !== 'home') {
+      var left = was ? jobsOf(was) : [];
+      if (left.length) select(left[0].id);
+      else showCompose();
+    }
+  }
+  renderJobs();
+  if (S.view === 'home') renderHome();
+  loadProjects();
+}
+
+/* Corregir el brief. Guardar sólo cambia el texto del expediente; guardar y
+ * regenerar relanza la generación SOBRE EL MISMO spot: no se pierde el sitio
+ * en el árbol ni el historial de decisiones. */
+function openBriefEdit() {
+  var job = selJob();
+  if (!job) return;
+  $('changes').hidden = true;
+  $('brief-edit').value = job.brief || '';
+  $('briefedit').hidden = false;
+  $('brief-edit').focus();
+}
+
+function saveBrief(regen) {
+  var job = selJob();
+  if (!job) return;
+  var text = $('brief-edit').value.trim();
+  if (!text) return;
+  $('briefedit').hidden = true;
+
+  if (!regen) {
+    api('/api/jobs/' + job.id, { method: 'PATCH', body: { brief: text } })
+      .then(function (d) {
+        if (d.job) upsertJob(d.job);
+        toast('', 'Brief updated.', null, 6000);
+      })
+      .catch(function (e) {
+        toast('bad', 'The brief could not be saved.', null, 8000);
+        pushFeed('error', job.id, 'PATCH /api/jobs: ' + e.message,
+                 'the brief could not be saved');
+      });
+    return;
+  }
+
+  api('/api/jobs/' + job.id + '/regenerate', { method: 'POST', body: { brief: text } })
+    .then(function (d) {
+      S.segs[job.id] = 0;
+      S.iters[job.id] = [];
+      if (d.job) upsertJob(d.job);
+      var fresh = jobById(job.id);
+      if (fresh) { Player.jobId = null; Player.load(fresh); }
+      renderStage();
+      pushFeed('job_update', job.id, 'regenerate', 'regenerating with the new brief');
+      toast('', 'Regenerating with the new brief.',
+            'You will be watching the new version in seconds.', 8000);
+    })
+    .catch(function (e) {
+      toast('bad', 'We could not relaunch the generation.', null, 8000);
+      pushFeed('error', job.id, 'POST /api/jobs/regenerate: ' + e.message,
+               'the generation could not be relaunched');
+    });
 }
 
 // En cada momento, una sola cosa evidente que hacer.
@@ -1308,6 +1767,7 @@ function upsertJob(job) {
   }
   if (!found) S.jobs.unshift(job);
   renderJobs();
+  if (S.view === 'home') renderHome();
   if (job.id === S.sel) { renderStage(); renderRail(); renderTech(); }
 }
 
@@ -1466,6 +1926,20 @@ function handleEvent(type, d) {
       }
       return;
 
+    case 'job_deleted':
+      dropJob(d.job_id);
+      return;
+
+    case 'projects_changed':
+      // Otra pestaña (o el propio servidor) tocó la estructura: se recarga entera.
+      api('/api/jobs').then(function (r) {
+        S.jobs = r.jobs || [];
+        renderJobs();
+        if (S.view === 'home') renderHome();
+      }).catch(function () {});
+      loadProjects();
+      return;
+
     case 'chaos':
       S.chaos[d.provider] = !!d.dead;
       pushFeed('chaos', jid, d.provider + (d.dead ? ' DOWN' : ' back up'),
@@ -1476,14 +1950,6 @@ function handleEvent(type, d) {
       renderChaos();
       return;
   }
-}
-
-function pickDefaultJob() {
-  var live = S.jobs.filter(isLive);
-  if (live.length) return live[0];
-  var rev = S.jobs.filter(function (j) { return j.status === 'in_review'; });
-  if (rev.length) return rev[0];
-  return S.jobs[0];
 }
 
 /* ═════════════════════════ arranque ═════════════════════════ */
@@ -1510,12 +1976,13 @@ function bootstrapJobs() {
     S.jobs = d.jobs || [];
     renderJobs();
     renderProjectPicker();
-    // Si ya hay trabajo hecho, se enseña; si no, la pantalla pide un brief.
-    if (S.jobs.length) select(pickDefaultJob().id);
-    else showCompose();
+    // Se entra por la rejilla de proyectos, salvo que el hash diga qué había abierto.
+    var want = readHash();
+    if (want && allProjects().indexOf(want) !== -1) openProject(want);
+    else showHome();
   }).catch(function () {
     renderJobs();
-    showCompose();
+    showHome();
   });
 }
 
@@ -1527,6 +1994,8 @@ function bindKeys() {
     if (e.key === 'Escape') {
       if (S.techOpen) { toggleTech(false); return; }
       if (!$('changes').hidden) { $('changes').hidden = true; return; }
+      if (!$('briefedit').hidden) { $('briefedit').hidden = true; return; }
+      if (S.view === 'spot') { showHome(); return; }
       return;
     }
 
@@ -1564,6 +2033,39 @@ function start() {
   $('btn-create').addEventListener('click', createSpot);
   $('btn-new').addEventListener('click', showCompose);
   $('btn-new-project').addEventListener('click', openNewProject);
+
+  // ── HOME ──
+  $('crumb-home').addEventListener('click', showHome);
+  $('btn-home-new').addEventListener('click', function () {
+    $('home-new').hidden = false;
+    $('home-new-name').value = '';
+    $('home-new-name').focus();
+  });
+  $('home-new').addEventListener('submit', submitHomeProject);
+  $('home-new-cancel').addEventListener('click', function () { $('home-new').hidden = true; });
+  $('home-new-name').addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') $('home-new').hidden = true;
+  });
+  window.addEventListener('hashchange', function () {
+    var want = readHash();
+    if (!want) { if (S.view !== 'home') showHome(); return; }
+    if (want !== S.project) openProject(want);
+  });
+
+  // ── edición del spot abierto ──
+  $('spot-title').addEventListener('dblclick', function () {
+    var j = selJob();
+    if (j) renameSpot(j);
+  });
+  $('btn-brief-cancel').addEventListener('click', function () { $('briefedit').hidden = true; });
+  $('btn-brief-save').addEventListener('click', function () { saveBrief(false); });
+  $('btn-brief-regen').addEventListener('click', function () { saveBrief(true); });
+
+  $('btn-signout').addEventListener('click', function () {
+    api('/api/access/exit', { method: 'POST', body: {} })
+      .catch(function () {})
+      .then(function () { window.location.replace('/gate.html'); });
+  });
   $('newproj').addEventListener('submit', submitNewProject);
   $('newproj-name').addEventListener('blur', function () { $('newproj').hidden = true; });
   $('newproj-name').addEventListener('keydown', function (e) {

@@ -7,7 +7,7 @@
 <title>FirstFrame — watch the spot before it finishes rendering</title>
 <meta name="description" content="FirstFrame streams every scene as it is generated, so the first reviewable frame lands in seconds instead of at the end of the render.">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/landing.css?v=36">
+<link rel="stylesheet" href="/landing.css?v=40">
 </head>
 <body>
 
@@ -43,8 +43,8 @@
 
   <div class="wrap wide hero-shot rv d3">
     <figure class="frame" id="heroshot">
-      <img src="/assets/ui-review.png" width="3200" height="2000" fetchpriority="high"
-           alt="The FirstFrame review room mid-render: the opening scene is already playing, the run panel shows two scenes ready and four still pending, and B2 segment events are landing live.">
+      <img src="/assets/step-review.jpg" width="2400" height="1500" fetchpriority="high"
+           alt="The FirstFrame review room: the spot plays in the monitor, the timeline below shows three finished scenes, and the inspector lists the job, its bucket and its provenance manifest.">
     </figure>
   </div>
 </header>
@@ -82,73 +82,80 @@
   </div>
 </section>
 
-<!-- ═══════════════════════════ tarjetas ═══════════════════════════ -->
-<section class="sec">
-  <div class="wrap">
-    <h2 class="rv center" style="margin-inline:auto">Judge it while it is still being made.</h2>
-
-    <div class="cards">
-      <article class="card rv" style="--c:#FF6B5E">
-        <span class="tag">Stream</span>
-        <h3>Review starts on scene one</h3>
-        <p>The player attaches to a playlist that is still growing.</p>
-      </article>
-
-      <article class="card rv d1" style="--c:#B49CFF">
-        <span class="tag">Iterate</span>
-        <h3>Reject at second three</h3>
-        <p>The refined take joins the same playlist. No reload, no second link.</p>
-      </article>
-
-      <article class="card rv d2" style="--c:#6EA8FF">
-        <span class="tag">Keep</span>
-        <h3>Approved means locked</h3>
-        <p>An approved spot cannot be deleted or overwritten for 30 days.</p>
-      </article>
-    </div>
+<!-- ═══════════════════ entrada al recorrido ═══════════════════
+     Alineada a la izquierda a propósito: el hero y la carrera van centrados,
+     y tres secciones centradas seguidas se leen como plantilla. -->
+<section class="lead" id="lead">
+  <div class="wrap wide">
+    <h2 class="lead-h">Judge it while it is<br>still being made.</h2>
+    <p class="lead-p">Four beats off the same link — it plays, it lands, you send it back, it locks.
+      Every screen below is this app, mid-job.</p>
   </div>
 </section>
 
-<!-- ═══════════════════════ dos momentos de la sala ═══════════════════════
-     La captura ya no comparte fila con el texto: cabe entera y a tamaño real,
-     que es la única manera de que se entienda lo que se está enseñando. -->
-<section class="sec">
-  <div class="wrap wide">
+<!-- ═══════════════════ el recorrido — scrollytelling ═══════════════════
+     La captura se queda pegada y cambia sola: cada paso enciende la suya. Va
+     atado a la posición de scroll, igual que la carrera, así que al subir se
+     deshace. Sin movimiento (reduced-motion) la sección se aplana a texto y
+     captura alternos, en orden, con todo visible. -->
+<section class="flow" id="flow">
+  <div class="flow-sticky">
+    <div class="wrap wide flow-grid">
 
-    <div class="show">
-      <div class="show-txt">
-        <p class="kicker rv">Change it</p>
-        <h2 class="rv d1">Send it back mid&#8209;render.</h2>
-        <p class="lede rv d2">Say what is wrong in plain words. The scene is re-run and the new take
-          replaces it in place.</p>
+      <ol class="flow-steps" id="flow-steps">
+        <li class="step on">
+          <span class="step-n">01 — Generating</span>
+          <h3>Three scenes play while the fourth does not exist yet.</h3>
+          <p>First frame at <b>8.8 s</b>, mid-render. The badge still reads GENERATING.</p>
+        </li>
+
+        <li class="step">
+          <span class="step-n">02 — Ready for review</span>
+          <h3>The render lands and the timeline fills in.</h3>
+          <p>Three scenes, <b>40.7 s</b> of render. Same link, same player — nothing was re-sent.</p>
+        </li>
+
+        <li class="step">
+          <span class="step-n">03 — Request changes</span>
+          <h3>Send it back in plain words.</h3>
+          <p>Pick the scene, say what is wrong. The new take replaces it in place.</p>
+        </li>
+
+        <li class="step">
+          <span class="step-n">04 — Approved</span>
+          <h3>Approving is what makes it undeletable.</h3>
+          <p>An <b>Object Lock</b> in GOVERNANCE mode: 30 days, no delete, no overwrite.</p>
+        </li>
+      </ol>
+
+      <div class="flow-stack">
+        <figure class="frame shot on">
+          <img src="/assets/step-generating.jpg" width="2400" height="1500" loading="lazy"
+               alt="FirstFrame mid-render: the monitor is playing under a GENERATING badge, the inspector reads 3 of 4 scenes with scene 4 still pending, and B2 segment events keep landing.">
+        </figure>
+        <figure class="frame shot">
+          <img src="/assets/step-review.jpg" width="2400" height="1500" loading="lazy"
+               alt="A finished spot ready for review: three scenes ready, a full timeline, and Request changes and Approve waiting under the player.">
+        </figure>
+        <figure class="frame shot">
+          <img src="/assets/step-changes.jpg" width="2400" height="1500" loading="lazy"
+               alt="The change request open over the player: a plain-language note about the side light and a picker choosing which scene it applies to.">
+        </figure>
+        <figure class="frame shot">
+          <img src="/assets/step-approved.jpg" width="2400" height="1500" loading="lazy"
+               alt="An approved spot: the header reads APPROVED, the copy says it is locked for 30 days, and the inspector shows lock GOVERNANCE.">
+        </figure>
       </div>
-      <figure class="frame rv d1">
-        <img src="/assets/ui-changes.png" width="3200" height="2000" loading="lazy"
-             alt="The FirstFrame review room with the change request open: a plain-language note and a picker for which scene it applies to.">
-      </figure>
-    </div>
 
-    <div class="show">
-      <div class="show-txt">
-        <p class="kicker rv">Approve it</p>
-        <h2 class="rv d1">Then it stops being deletable.</h2>
-        <p class="lede rv d2">Approving locks the spot for 30 days. The panel shows the lock next to
-          the player, not in a log file.</p>
-      </div>
-      <figure class="frame rv d1">
-        <img src="/assets/ui-approved.png" width="3200" height="2000" loading="lazy"
-             alt="An approved spot in FirstFrame: the header reads APPROVED and the panel shows the object is locked for 30 days.">
-      </figure>
     </div>
-
   </div>
 </section>
 
 <!-- ═══════════════════════════ cierre ═══════════════════════════ -->
-<section class="close">
+<section class="close" id="close">
   <div class="wrap">
-    <h2 class="rv" style="margin-inline:auto">Stop waiting on the render.</h2>
-    <div class="hero-acts rv d1">
+    <h2>Stop waiting on the render.</h2>
+    <div class="hero-acts">
       <a class="btn primary lg" href="/">Open the review room</a>
     </div>
   </div>
@@ -172,6 +179,6 @@
   </footer>
 </div>
 
-<script src="/landing.js?v=33"></script>
+<script src="/landing.js?v=36"></script>
 </body>
 </html>

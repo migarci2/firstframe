@@ -831,3 +831,134 @@ body.no-rail .toasts { right: 24px; }
 /* El inspector se cierra desde la cabecera: quien graba puede dejar el monitor
    a ancho completo sin perder nada. */
 body.no-rail .p-inspector { display: none; }
+
+/* ═══════════════════ HOME: la rejilla de proyectos ═══════════════════
+ * Lo primero que se ve al entrar. No es una pantalla de bienvenida: es el
+ * trabajo que hay, con su fecha y su estado, como cualquier herramienta que
+ * se abre todos los días. Mismo lienzo, mismos paneles, sin animación. */
+
+body.home .shell { display: none; }
+body.home .home  { display: block; }
+.home { display: none; height: calc(100vh - 48px); overflow-y: auto; }
+.home-in { max-width: 1120px; margin: 0 auto; padding: 44px 32px 64px; }
+
+.home-head { display: flex; align-items: flex-end; gap: 24px; margin-bottom: 28px; }
+.home-head h1 {
+  margin: 0; font-size: 27px; font-weight: 600; letter-spacing: -.03em; color: var(--white);
+}
+.home-sub { margin: 6px 0 0; color: var(--ash); font-size: 14px; }
+.home-head .primary { margin-left: auto; flex: none; }
+
+.home-new { display: flex; gap: 10px; margin: 0 0 24px; }
+.home-new input {
+  flex: 1; max-width: 340px; background: var(--recessed); color: var(--white);
+  border: 1px solid var(--border); border-radius: 9px; padding: 0 14px; height: 40px;
+  outline: none;
+}
+.home-new input:focus { border-color: rgba(255,255,255,.22); }
+
+.cards {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+}
+
+.card {
+  position: relative; text-align: left;
+  background: var(--card); border-radius: 12px;
+  box-shadow: rgba(255,255,255,.075) 0 0 0 1px;
+  overflow: hidden; transition: box-shadow .14s, background .14s;
+}
+.card:hover { background: #101113; box-shadow: rgba(255,255,255,.16) 0 0 0 1px; }
+.card-open {
+  display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0;
+}
+.card-thumb {
+  aspect-ratio: 16 / 9; background: var(--recessed);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Sin spots todavía: un plano vacío, no una imagen rota. */
+.card-thumb.empty { color: var(--iron); font-size: 12.5px; letter-spacing: -.005em;
+  background: linear-gradient(150deg, #0f1012, #0a0b0c); }
+
+.card-body { padding: 14px 16px 16px; }
+.card-name {
+  margin: 0; font-size: 15px; font-weight: 550; color: var(--white);
+  letter-spacing: -.015em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-meta { margin: 5px 0 0; font-size: 12.5px; color: var(--smoke); }
+.card-status { display: inline-block; margin-top: 9px; font-size: 12px; }
+.card-status.t-live  { color: var(--info); }
+.card-status.t-ready { color: var(--coral); }
+.card-status.t-good  { color: var(--ok); }
+.card-status.t-bad   { color: var(--bad); }
+
+/* Las acciones no gritan: aparecen cuando el puntero está en la tarjeta. */
+.card-acts {
+  position: absolute; top: 10px; right: 10px; display: flex; gap: 4px;
+  opacity: 0; transition: opacity .12s;
+}
+.card:hover .card-acts, .card:focus-within .card-acts { opacity: 1; }
+.card-acts button {
+  border: 0; border-radius: 7px; padding: 5px 9px; font-size: 12px; font-weight: 500;
+  background: rgba(8,9,10,.82); color: var(--mist);
+}
+.card-acts button:hover { background: rgba(8,9,10,.95); color: var(--white); }
+.card-acts button.danger:hover { color: var(--bad); }
+
+/* Renombrar en línea: el nombre se convierte en campo, sin diálogo ni pantalla. */
+.card-edit {
+  width: 100%; background: var(--recessed); color: var(--white);
+  border: 1px solid rgba(255,255,255,.22); border-radius: 7px;
+  padding: 5px 8px; font-size: 15px; font-weight: 550; letter-spacing: -.015em;
+  outline: none;
+}
+
+/* Confirmación en el sitio, no un alert del navegador. */
+.confirm {
+  position: absolute; inset: auto 10px 10px 10px;
+  background: rgba(8,9,10,.94); border-radius: 9px; padding: 10px 12px;
+  box-shadow: rgba(255,255,255,.12) 0 0 0 1px;
+}
+.confirm p { margin: 0 0 9px; font-size: 12.5px; color: var(--ash); line-height: 1.45; }
+.confirm-row { display: flex; gap: 8px; justify-content: flex-end; }
+.confirm-row button {
+  border: 0; border-radius: 7px; padding: 5px 11px; font-size: 12.5px; font-weight: 500;
+  background: rgba(255,255,255,.07); color: var(--mist);
+}
+.confirm-row button:hover { background: rgba(255,255,255,.12); color: var(--white); }
+.confirm-row button.danger { background: var(--bad); color: #1a0705; }
+.confirm-row button.danger:hover { background: #ff9080; }
+
+/* ─────────────── volver a la rejilla desde la barra de programa ─────────────── */
+.crumb-root {
+  background: none; border: 0; padding: 0; color: var(--ash);
+  font-size: 13px; letter-spacing: -.006em;
+}
+.crumb-root:hover { color: var(--white); }
+body.home .crumb-p, body.home .crumb-j, body.home .crumb-s { display: none; }
+body.home .crumb-root { color: var(--white); font-weight: 550; }
+
+/* ─────────────── herramientas del spot abierto ─────────────── */
+.spottools { display: flex; align-items: center; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+.spottools button {
+  background: none; border: 0; padding: 0; color: var(--smoke);
+  font-size: 12.5px; letter-spacing: -.005em;
+}
+.spottools button:hover { color: var(--white); }
+.spottools button.danger:hover { color: var(--bad); }
+.spottools select {
+  background: var(--recessed); color: var(--ash); border: 1px solid var(--border-2);
+  border-radius: 7px; padding: 3px 8px; font-size: 12.5px; max-width: 190px;
+}
+.spottools select:hover { color: var(--white); }
+.spottools .sep { color: var(--iron); font-size: 12px; }
+
+/* El título del spot se renombra donde está, con doble clic. */
+.titleedit {
+  width: 100%; max-width: 520px;
+  background: var(--recessed); color: var(--white);
+  border: 1px solid rgba(255,255,255,.22); border-radius: 8px;
+  padding: 4px 10px; outline: none;
+  font-size: 23px; font-weight: 600; letter-spacing: -.028em;
+}

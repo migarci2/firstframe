@@ -308,13 +308,17 @@ h2 {
   display: flex; align-items: center;
   overflow: hidden;
 }
+/* Resplandor sin aristas: un radial que muere en transparente mucho antes del
+ * borde de su caja. Un bloque de color con filter: blur() deja ver el corte en
+ * cuanto el ancestro tiene overflow: hidden — aquí no hay nada que cortar. */
 .race-sticky::before {
   content: ''; position: absolute; left: 50%; top: 50%; z-index: -1;
-  width: 780px; height: 200px; transform: translate(-50%,-50%) rotate(-6deg);
-  border-radius: 120px;
-  background: linear-gradient(96deg, #FF3B26, #FF9178);
-  filter: blur(90px);
-  opacity: calc(.12 + var(--lit, 0) * .3);
+  width: min(1200px, 130%); height: 620px;
+  transform: translate(-50%,-50%);
+  background: radial-gradient(50% 50% at 50% 50%,
+      rgba(255,90,66,.34) 0%, rgba(255,107,94,.16) 40%,
+      rgba(255,107,94,.05) 64%, rgba(255,107,94,0) 80%);
+  opacity: calc(.42 + var(--lit, 0) * .58);
   transition: opacity .5s ease;
 }
 
@@ -384,88 +388,136 @@ h2 {
   .race-punch { opacity: 1; transform: none; }
 }
 
-/* ───────────────────────────── tarjetas ───────────────────────────── */
+/* ─────────────────────── entrada al recorrido ───────────────────────
+ * Alineada a la izquierda: rompe la cadena de secciones centradas. Entra
+ * escalonada y atada al scroll (--q1/--q2), no con un disparo de una vez. */
 
-.cards {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-  margin-top: 48px;
+.lead { padding: clamp(90px, 11vw, 150px) 0 clamp(18px, 2.4vw, 34px); }
+.lead-h {
+  font-size: clamp(30px, 4.4vw, 52px);
+  max-width: 22ch;
+  opacity: var(--q1, 1);
+  transform: translateY(calc((1 - var(--q1, 1)) * 20px));
 }
-.card {
+.lead-p {
+  margin: 22px 0 0; max-width: 56ch;
+  font-size: 17px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty;
+  opacity: var(--q2, 1);
+  transform: translateY(calc((1 - var(--q2, 1)) * 20px));
+}
+.lead-p b { color: var(--ink); font-weight: 550; }
+
+/* ─────────────────────── el recorrido (scrollytelling) ───────────────────────
+ * Una sección alta con el contenido pegado, igual que la carrera: los cuatro
+ * pasos están siempre a la vista —el índice del recorrido— y sólo cambia cuál
+ * está encendido. La captura vive en el mismo hueco y se releva con él.
+ * Todo sale de la posición de scroll: al subir, se apaga y vuelve el anterior.
+ */
+
+.flow { position: relative; height: 430vh; }
+.flow-sticky {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; align-items: center;
+}
+.flow-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 27%) 1fr;
+  column-gap: clamp(26px, 3vw, 50px);
+  align-items: center;
+}
+
+/* La captura no puede pasarse del alto de la pantalla: se limita por ahí y la
+ * columna de texto manda en el ancho. 16/10 es la proporción real del PNG. */
+.flow-stack {
   position: relative;
-  border: 1px solid var(--line-2);
-  border-radius: 14px;
-  padding: 24px 22px 26px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--c) 12%, transparent) 0%, rgba(255,255,255,.014) 42%, rgba(255,255,255,.014) 100%),
-    var(--bg-2);
-  overflow: hidden;
-  transition: border-color .2s ease, transform .2s ease;
+  width: 100%;
+  max-width: calc((100vh - 170px) * 1.6);
+  margin-left: auto;
+  aspect-ratio: 16 / 10;
 }
-.card:hover { border-color: color-mix(in srgb, var(--c) 34%, transparent); transform: translateY(-2px); }
-.card::before {
-  content: ''; position: absolute; inset: 0 0 auto 0; height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c) 70%, transparent), transparent);
+.shot {
+  position: absolute; inset: 0; margin: 0;
+  opacity: 0; transform: scale(.985);
+  transition: opacity .45s ease, transform .45s ease;
 }
-.card h3 {
-  margin: 0 0 10px;
-  font-size: 16.5px; font-weight: 600; letter-spacing: -.018em;
-  color: var(--ink);
+.shot.on { opacity: 1; transform: none; }
+.shot img { width: 100%; height: 100%; object-fit: cover; }
+
+.flow-steps {
+  position: relative;
+  margin: 0; padding: 4px 0 4px clamp(20px, 2vw, 28px);
+  list-style: none;
+  border-left: 1px solid var(--line-2);
+  display: grid; gap: clamp(20px, 2.6vh, 30px);
 }
-.card p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-2); }
-.card .tag {
-  display: inline-block; margin-bottom: 16px;
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--c);
-  padding: 4px 8px; border-radius: 5px;
-  background: color-mix(in srgb, var(--c) 14%, transparent);
-}
-.card code {
-  font-family: var(--mono); font-size: 12.5px;
-  color: var(--ink); background: rgba(255,255,255,.06);
-  padding: 1px 5px; border-radius: 4px;
+/* El carril se rellena con la posición de scroll. Escala vertical: se compone
+ * en la GPU y no obliga a rehacer el layout en cada fotograma. */
+.flow-steps::before {
+  content: ''; position: absolute; left: -1px; top: 0;
+  width: 2px; height: 100%; border-radius: 2px;
+  background: linear-gradient(180deg, var(--coral), var(--coral-2));
+  transform-origin: top; transform: scaleY(var(--p, 0));
 }
 
-/* ───────────────────────────── bloques alternos ───────────────────────────── */
+.step-n {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .11em; text-transform: uppercase;
+  color: var(--ink-3);
+  transition: color .35s ease;
+}
+.step h3 {
+  margin: 9px 0 0;
+  font-size: clamp(18px, 1.55vw, 22px);
+  line-height: 1.2; letter-spacing: -.022em; font-weight: 600;
+  color: var(--ink-3);
+  text-wrap: pretty;
+  transition: color .35s ease;
+}
+.step p {
+  margin: 8px 0 0; max-width: 42ch;
+  font-size: 14.5px; line-height: 1.5; color: var(--ink-3);
+  opacity: .5;
+  text-wrap: pretty;
+  transition: opacity .35s ease, color .35s ease;
+}
+.step p b { color: inherit; font-weight: 600; }
 
-/* El texto va delante y estrecho; la captura debajo, a todo el ancho de la caja
- * ancha. Antes compartían fila y la interfaz salía a 640 px: ilegible. */
-.show + .show { margin-top: clamp(80px, 9vw, 128px); }
-.show-txt {
-  max-width: 46ch;
-  margin: 0 auto clamp(30px, 3.4vw, 46px);
-  text-align: center;
-}
-.show-txt h2 { font-size: clamp(28px, 3.4vw, 42px); max-width: 18ch; margin-inline: auto; }
-.show-txt .lede { font-size: 17px; max-width: 52ch; margin-inline: auto; }
-
-.facts { margin: 26px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-/* Nada de flex aquí: el <b> y el <code> de dentro se convertirían en cajas
- * flex sueltas y la frase se rompería en columnas. Viñeta absoluta. */
-.facts li {
-  position: relative; padding-left: 17px;
-  font-size: 14.5px; color: var(--ink-2); line-height: 1.55;
-}
-.facts li::before {
-  content: ''; position: absolute; left: 0; top: .68em;
-  width: 5px; height: 5px; border-radius: 50%; background: var(--coral);
-}
-.facts b { color: var(--ink); font-weight: 550; }
-.facts code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+.step.on .step-n { color: var(--coral); }
+.step.on h3     { color: var(--ink); }
+.step.on p      { color: var(--ink-2); opacity: 1; }
+.step.on p b    { color: var(--ink); }
 
 /* ───────────────────────────── cierre ───────────────────────────── */
 
-.close { padding: 130px 0 90px; text-align: center; position: relative; overflow: hidden; }
-/* Sin clip-path: el recorte se aplica DESPUÉS del blur y devuelve un cuadrilátero
- * de bordes duros. Rectángulo redondeado girado, como las esquirlas del hero. */
-.close::before {
-  content: ''; position: absolute; left: 50%; top: 14%; z-index: -1;
-  width: 620px; height: 150px; transform: translateX(-50%) rotate(-7deg);
-  background: linear-gradient(96deg, #FF3B26, #FF9178);
-  border-radius: 90px;
-  filter: blur(64px); opacity: .5;
+/* Se compone al llegar: el resplandor crece y el titular sube, los dos atados a
+ * --q (posición de scroll de la sección). Al subir se deshace. */
+.close {
+  padding: clamp(112px, 13vw, 150px) 0 clamp(78px, 9vw, 96px);
+  text-align: center; position: relative; isolation: isolate;
 }
-.close h2 { font-size: clamp(32px, 5.2vw, 60px); max-width: 18ch; }
-.close .hero-acts { margin-top: 32px; }
+/* Ni blur ni bordes duros: un radial que ya es transparente al 78% de su radio,
+ * así que ningún recorte puede dejar una arista a la vista. */
+.close::before {
+  content: ''; position: absolute; z-index: -1;
+  left: 50%; top: 46%;
+  width: min(880px, 118%); height: 430px;
+  transform: translate(-50%, -50%) scale(calc(.86 + var(--q, 1) * .14));
+  background: radial-gradient(50% 50% at 50% 50%,
+      rgba(255,86,62,.46) 0%, rgba(255,107,94,.16) 40%,
+      rgba(255,107,94,.04) 64%, rgba(255,107,94,0) 79%);
+  opacity: calc(.26 + var(--q, 1) * .74);
+}
+.close h2 {
+  font-size: clamp(32px, 5.2vw, 60px); max-width: 18ch; margin-inline: auto;
+  opacity: var(--q, 1);
+  transform: translateY(calc((1 - var(--q, 1)) * 22px));
+}
+.close .hero-acts {
+  margin-top: 32px;
+  opacity: var(--q2, 1);
+  transform: translateY(calc((1 - var(--q2, 1)) * 22px));
+}
 
 .foot {
   border-top: 1px solid var(--line-2);
@@ -488,17 +540,107 @@ h2 {
   .rv.in { transition: none; }
 }
 
+/* ─────────────── sin movimiento: la página, ya terminada ───────────────
+ * El recorrido se aplana a paso-captura-paso-captura, en orden y con todo
+ * visible. display: contents saca los envoltorios del layout para poder
+ * intercalarlos con order sin duplicar una sola imagen. */
+
+/* La sección se aplana a paso · captura · paso · captura, en orden y con todo
+ * a la vista. display: contents saca los envoltorios del layout, y así se
+ * pueden intercalar con order sin duplicar una sola imagen. */
+.flow.flow-flat { height: auto; }
+.flow-flat .flow-sticky { position: static; height: auto; padding: 20px 0 50px; }
+.flow-flat .flow-grid {
+  display: flex; flex-direction: column;
+  gap: clamp(30px, 4vw, 52px);
+}
+.flow-flat .flow-steps, .flow-flat .flow-stack { display: contents; }
+.flow-flat .shot {
+  position: static; opacity: 1; transform: none;
+  aspect-ratio: auto; transition: none;
+}
+.flow-flat .shot img { height: auto; }
+.flow-flat .step {
+  border-left: 1px solid var(--line-2);
+  padding-left: clamp(20px, 2vw, 28px);
+}
+.flow-flat .step .step-n { color: var(--coral); }
+.flow-flat .step h3 { font-size: clamp(21px, 2.6vw, 27px); color: var(--ink); }
+.flow-flat .step p  { color: var(--ink-2); opacity: 1; max-width: 60ch; }
+.flow-flat .step p b { color: var(--ink); }
+
+.flow-flat .step:nth-of-type(1) { order: 1 } .flow-flat .shot:nth-of-type(1) { order: 2 }
+.flow-flat .step:nth-of-type(2) { order: 3 } .flow-flat .shot:nth-of-type(2) { order: 4 }
+.flow-flat .step:nth-of-type(3) { order: 5 } .flow-flat .shot:nth-of-type(3) { order: 6 }
+.flow-flat .step:nth-of-type(4) { order: 7 } .flow-flat .shot:nth-of-type(4) { order: 8 }
+
+@media (prefers-reduced-motion: reduce) {
+  .lead-h, .lead-p, .close h2, .close .hero-acts { opacity: 1; transform: none; }
+  .close::before { transform: translate(-50%,-50%); opacity: 1; }
+
+  .flow { height: auto; }
+  .flow-sticky { position: static; height: auto; padding: 30px 0 60px; }
+  .flow-grid {
+    display: flex; flex-direction: column;
+    gap: clamp(30px, 4vw, 52px);
+  }
+  .flow-steps, .flow-stack { display: contents; }
+  .shot {
+    position: static; opacity: 1; transform: none;
+    aspect-ratio: auto; transition: none;
+  }
+  .shot img { height: auto; }
+  .step {
+    border-left: 1px solid var(--line-2);
+    padding-left: clamp(20px, 2vw, 28px);
+  }
+  .step .step-n { color: var(--coral); }
+  .step h3 { font-size: clamp(21px, 2.6vw, 27px); color: var(--ink); }
+  .step p  { color: var(--ink-2); opacity: 1; max-width: 60ch; }
+  .step p b { color: var(--ink); }
+
+  .step:nth-of-type(1) { order: 1 } .shot:nth-of-type(1) { order: 2 }
+  .step:nth-of-type(2) { order: 3 } .shot:nth-of-type(2) { order: 4 }
+  .step:nth-of-type(3) { order: 5 } .shot:nth-of-type(3) { order: 6 }
+  .step:nth-of-type(4) { order: 7 } .shot:nth-of-type(4) { order: 8 }
+}
+
 /* ───────────────────────────── adaptación ───────────────────────────── */
 
-@media (max-width: 960px) {
-  .cards { grid-template-columns: 1fr; }
+/* Por debajo de 900 px la columna de texto estrangularía la captura: la sección
+ * se aplana y cada paso lleva la suya debajo. Misma lectura, sin pegados. */
+@media (max-width: 900px) {
   .nav-links { display: none; }
+
+  .flow { height: auto !important; }
+  .flow-sticky { position: static; height: auto; padding: 20px 0 50px; }
+  .flow-grid {
+    display: flex; flex-direction: column;
+    gap: clamp(30px, 4vw, 48px);
+  }
+  .flow-steps, .flow-stack { display: contents; }
+  .shot {
+    position: static; opacity: 1; transform: none;
+    aspect-ratio: auto; transition: none;
+  }
+  .shot img { height: auto; }
+  .step {
+    border-left: 1px solid var(--line-2);
+    padding-left: 20px;
+  }
+  .step .step-n { color: var(--coral); }
+  .step h3 { font-size: clamp(21px, 3vw, 26px); color: var(--ink); }
+  .step p  { color: var(--ink-2); opacity: 1; max-width: none; }
+  .step p b { color: var(--ink); }
+
+  .step:nth-of-type(1) { order: 1 } .shot:nth-of-type(1) { order: 2 }
+  .step:nth-of-type(2) { order: 3 } .shot:nth-of-type(2) { order: 4 }
+  .step:nth-of-type(3) { order: 5 } .shot:nth-of-type(3) { order: 6 }
+  .step:nth-of-type(4) { order: 7 } .shot:nth-of-type(4) { order: 8 }
 }
+
 @media (max-width: 620px) {
-  .cards { grid-template-columns: 1fr; }
-  .stats { grid-template-columns: 1fr; }
   .hero { padding-top: 128px; }
   .sec { padding: 74px 0; }
-  .row { grid-template-columns: 1fr auto; }
-  .row .l { grid-column: 1 / -1; }
+  .lead { padding: 80px 0 44px; }
 }
