@@ -749,7 +749,7 @@ infra/        b2_setup.py (lifecycle + event rules), make_keys.py (restricted ke
 web/          review room — vanilla HTML/JS/CSS, no build step
 scripts/      probes run against the real services before building on them
 docs/         architecture.md
-research/     competitive recon, SDK dossier, SDK feedback write-up
+research/     SDK dossier and the DX feedback write-up we sent upstream
 PLAN.md       the plan, with §0 = facts verified by running code
 VALIDACION.md what we probed against the real services, and what came back
 ```
