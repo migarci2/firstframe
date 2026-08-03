@@ -96,7 +96,7 @@ _PRODUCTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # --- cosmetica: la familia que mas se desvia a caras --------------------
     ("a slim dark glass bottle of olive oil with a pouring spout",
      ("aceite de oliva", "olive oil", "oliva")),
-    ("a small amber glass dropper bottle of cosmetic serum, glass pipette cap",
+    ("a small amber glass dropper bottle of cosmetic serum",
      ("serum", "suero", "ampolla", "elixir")),
     ("a round frosted ceramic jar of cosmetic cream, lid resting beside it",
      ("crema", "cream", "hidratante", "moisturi", "balsamo", "unguento")),
@@ -117,7 +117,8 @@ _PRODUCTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("a compact of pressed powder, open, beside a brush",
      ("maquillaje", "makeup", "polvos", "base de", "foundation")),
     # --- bebida y alimentacion ---------------------------------------------
-    ("a kraft paper bag of roasted coffee beans beside a ceramic cup of espresso",
+    ("a white porcelain espresso cup on a saucer, roasted coffee beans "
+     "scattered beside it",
      ("cafe", "coffee", "espresso", "cappuccino", "arabica")),
     ("a tin of loose leaf tea, open, beside a clear glass cup of tea",
      ("te ", "tea", "infusion", "matcha", "rooibos")),
@@ -130,6 +131,10 @@ _PRODUCTS: tuple[tuple[str, tuple[str, ...]], ...] = (
       "mezcal", "destilado")),
     ("a chilled glass bottle of fruit juice, droplets on the glass",
      ("zumo", "juice", "refresco", "soda", "limonada", "smoothie", "batido")),
+    ("a slim stainless steel insulated water bottle standing upright, matte "
+     "finish, no markings",
+     ("termica", "termo", "thermos", "cantimplora", "botella de agua",
+      "water bottle", "flask", "insulated bottle")),
     ("a slim glass bottle of still water beaded with condensation",
      ("agua", "water", "mineral")),
     ("a wrapped chocolate bar with a few squares broken off beside it",
@@ -144,19 +149,21 @@ _PRODUCTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("an open cardboard box of artisan snacks arranged on a board",
      ("snack", "galleta", "cookie", "cereal", "barrita")),
     # --- moda y accesorios --------------------------------------------------
-    ("a single running sneaker in three quarter view, laces neatly tied, "
-     "textured knit upper",
+    ("a single empty unworn running sneaker in three quarter view, knit upper "
+     "and thick rubber sole",
      ("zapatilla", "sneaker", "running", "deportiva", "trainer", "calzado",
       "zapato", "shoe", "bota", "boot", "sandalia")),
-    ("a structured leather shoulder bag standing upright, strap in a soft curve",
+    ("an empty structured leather shoulder bag standing upright, strap in a "
+     "soft curve",
      ("bolso", "handbag", "cartera", "clutch", "tote")),
-    ("a canvas backpack standing upright, straps hanging loose",
+    ("an empty canvas backpack standing upright, straps hanging loose",
      ("mochila", "backpack", "rucksack")),
-    ("a wristwatch with a leather strap lying flat, dial catching the light",
+    ("an unworn wristwatch with a leather strap lying flat, dial catching the "
+     "light",
      ("reloj", "watch", "cronografo")),
     ("a pair of folded sunglasses resting on their temples",
      ("gafas", "sunglasses", "lentes", "eyewear")),
-    ("a neatly folded knitted garment stacked on a wooden surface",
+    ("a neatly folded empty knitted garment stacked on a wooden surface",
      ("camiseta", "jersey", "sudadera", "chaqueta", "abrigo", "ropa", "prenda",
       "textil", "shirt", "hoodie", "jacket", "garment", "moda")),
     ("a fine gold ring and a thin chain arranged on a velvet tray",
@@ -239,15 +246,12 @@ _SURFACES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("black marble", ("marmol negro", "black marble")),
     ("white marble", ("marmol", "marble", "travertino", "alabastro")),
     ("pale travertine stone", ("piedra", "stone", "pizarra", "slate", "granito")),
-    ("warm oak wood", ("madera", "wood", "roble", "oak", "nogal", "walnut",
-                       "bambu", "teca")),
+    ("dark walnut wood", ("madera oscura", "dark wood", "nogal", "walnut",
+                          "wenge", "ebano")),
+    ("warm oak wood", ("madera", "wood", "roble", "oak", "bambu", "teca")),
     ("raw polished concrete", ("hormigon", "concrete", "cemento", "microcemento")),
     ("natural linen cloth", ("lino", "linen", "tela", "fabric", "algodon",
                              "cotton", "seda", "silk")),
-    ("brushed stainless steel", ("acero", "steel", "aluminio", "aluminium",
-                                 "metal", "titanio", "cromo")),
-    ("clear glass and mirror", ("cristal", "glass", "espejo", "mirror",
-                                "vidrio", "metacrilato")),
     ("pale beach sand", ("arena", "sand", "playa", "beach", "duna")),
     ("wet asphalt", ("asfalto", "asphalt", "calle", "street", "urbano",
                      "urban", "ciudad", "city")),
@@ -255,6 +259,11 @@ _SURFACES: tuple[tuple[str, tuple[str, ...]], ...] = (
                             "naturaleza", "nature", "selva")),
     ("dark slate with water", ("agua", "water", "mar ", "ocean", "rio",
                                "piscina", "pool")),
+    # Los ultimos a proposito: ver el comentario de arriba.
+    ("brushed stainless steel", ("acero", "steel", "aluminio", "aluminium",
+                                 "metal", "titanio", "cromo")),
+    ("clear glass and mirror", ("cristal", "glass", "espejo", "mirror",
+                                "vidrio", "metacrilato")),
 )
 _DEFAULT_SURFACE = "warm neutral stone"
 
@@ -270,31 +279,30 @@ def _surface(folded: str) -> str:
 # (frase de luz, paleta implicita, pistas). La paleta implicita solo se usa si
 # el brief no nombra un color explicito.
 _LIGHTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("soft low morning sunlight raking in through a tall window, long gentle "
-     "shadows",
+    ("soft low morning window light, long gentle shadows",
      "warm neutral palette",
      ("manana", "morning", "amanecer", "dawn", "sunrise", "alba", "desayuno")),
-    ("low golden hour sunlight, warm amber highlights",
+    ("low golden hour sunlight, amber highlights",
      "warm amber palette",
      ("atardecer", "sunset", "golden", "dorada", "ocaso", "crepusculo",
       "hora dorada", "golden hour")),
-    ("a single warm key light in near darkness, deep falloff, subtle haze",
+    ("one warm key light in near darkness, deep falloff",
      "dark charcoal palette",
      ("noche", "night", "nocturno", "oscuro", "dark", "moody", "medianoche",
       "neon", "bar ")),
-    ("clean diffused studio lighting from a large softbox",
+    ("clean diffused studio softbox lighting",
      "clean neutral palette",
      ("estudio", "studio", "editorial", "minimal", "packshot", "catalogo")),
-    ("bright overcast daylight through a wide window, soft even shadows",
+    ("bright overcast daylight through a wide window",
      "bright airy palette",
      ("ventana", "window", "dia", "daylight", "luz natural", "natural light",
       "nublado", "overcast")),
-    ("hard bright midday sun, crisp defined shadows",
+    ("hard bright midday sun, crisp shadows",
      "sun bleached palette",
      ("sol", "sunny", "soleado", "verano", "summer", "mediodia", "playa",
       "beach")),
 )
-_DEFAULT_LIGHT = ("soft directional daylight from one side, gentle falloff",
+_DEFAULT_LIGHT = ("soft directional daylight from one side",
                   "warm neutral palette")
 
 
@@ -370,7 +378,7 @@ def parse_brief(brief: str) -> BriefSpec:
     )
 
 
-def style_anchor(spec: BriefSpec | str) -> str:
+def style_anchor(spec: BriefSpec | str, *, studio: bool = False) -> str:
     """Frase de estilo compartida por las 3 escenas, DERIVADA del brief.
 
     Antes se elegia por hash entre cuatro anclas fijas, asi que un brief que
@@ -381,25 +389,53 @@ def style_anchor(spec: BriefSpec | str) -> str:
     El tratamiento de camara (35mm, grano, DOF corta) es fijo a proposito: es
     la parte que no depende del brief y la que hace que las 3 escenas parezcan
     salidas de la misma camara.
+
+    `studio=True` (solo el plano heroe) cambia la luz de entorno por luz de
+    plato y MANTIENE paleta, superficie y tratamiento. No es una excepcion
+    gratuita: con la luz de ventana del brief dentro, el "seamless backdrop" y
+    el "plinth" del heroe se los comia el modelo y las 3 escenas salian a la
+    misma distancia — no habia arco. Lo que sostiene la coherencia es la paleta
+    y el tratamiento, no la luz, que en un spot real tambien cambia entre el
+    plano de ambiente y el packshot.
     """
     if isinstance(spec, str):
         spec = parse_brief(spec)
-    return (f"{spec.palette}, {spec.light}, shot on 35mm film, "
-            f"shallow depth of field, fine grain, natural color grading")
+    light = "controlled studio lighting, strong rim light" if studio else spec.light
+    return f"{spec.palette}, {light}, 35mm film, shallow depth of field, fine grain"
 
 
 # --- Beats -------------------------------------------------------------------
-# Mini arco de 3 tiempos. El sujeto va SIEMPRE primero (los modelos de difusion
-# pesan mucho mas los primeros tokens) y el plano despues.
+# Mini arco de 3 tiempos: entorno -> textura -> heroe. El TIPO DE PLANO va
+# primero y el sujeto justo detras; los modelos de difusion pesan mucho mas los
+# primeros tokens, y con el tipo de plano al final (como estaba) las 3 escenas
+# salian a la misma distancia y no habia arco.
+#
+# Calibrado mirando generaciones, no de cabeza:
+#   - "camera far back, sits small on a distant table" en la apertura se pasa de
+#     frenada: sale una habitacion preciosa con el producto convertido en un
+#     borron irreconocible. El plano que funciona es producto en primer termino
+#     con el entorno detras y desenfocado — que es exactamente el frame de
+#     referencia del anuncio real.
+#   - "tight close-up" sale casi igual que la apertura y el arco se cae;
+#     "Macro 100mm photograph, extreme close-up ... edge to edge" si separa.
+#     La distancia focal es la palabra que de verdad mueve el encuadre.
+#   - "plinth + plain seamless backdrop + rim light + vignette" es lo unico que
+#     produce un heroe de verdad; "hero photograph" a secas lo ignora el modelo.
+#     Y solo funciona si la luz de ventana del brief NO viaja en el mismo
+#     prompt (ver `style_anchor(studio=True)`).
 _BEAT_SHOTS: dict[str, str] = {
-    "open": ("wide establishing photograph of {subject}, alone on a {surface} "
-             "tabletop in a quiet empty room, camera a few metres back, the "
-             "product occupying a small part of the composition"),
-    "detail": ("extreme macro photograph of {subject}, filling the whole image, "
-               "material texture and finish razor sharp, resting on {surface}"),
-    "hero": ("hero photograph of {subject}, centred on a {surface} pedestal "
-             "against a plain seamless backdrop, soft floor reflection, "
-             "rim light separating it from the background"),
+    "open": ("Wide angle establishing product photograph: {subject} in the "
+             # "interior" no: con una superficie de exterior (asfalto, arena)
+             # el modelo tiene que elegir y el plano se rompe. "setting" deja
+             # que el entorno lo decida la superficie del brief.
+             "foreground on {surface}, a calm empty setting soft out of "
+             "focus behind it"),
+    "detail": ("Macro 100mm photograph, extreme close-up: {subject} fills the "
+               "whole frame edge to edge, surface texture and material razor "
+               "sharp"),
+    "hero": ("Studio packshot, 85mm lens: {subject} isolated dead centre on a "
+             "{surface} plinth against a plain seamless backdrop, strong rim "
+             "light, mirror floor reflection, vignette"),
 }
 
 # Titulos que produce `runner._BEATS` (y los que suele inventar el plan por LLM)
@@ -414,15 +450,26 @@ _TITLE_ROLES: dict[str, str] = {
 }
 
 # Sufijo global. Todo en POSITIVO: describe la foto que queremos (bodegon de
-# producto, escena vacia, objetos) en vez de prohibir la que no queremos. Las
-# prohibiciones van en NEGATIVE_PROMPT, que es donde el sampler si las resta.
-_SUFFIX = ("still life product photography, objects only, empty uninhabited "
-           "scene, unbranded blank packaging, cinematic advertising still, "
-           "16:9 widescreen, photorealistic, sharp focus, high detail")
+# producto, escena vacia, objetos) en vez de prohibir la que no queremos.
+#
+# Esto NO es una preferencia de estilo, es el unico mecanismo que funciona:
+# `negative_prompt` esta MEDIDO como inerte en Pollinations (ver NEGATIVE_PROMPT).
+# Todo lo que evita que salga una persona tiene que estar en este texto.
+_SUFFIX = ("Still life product photography, objects only, empty scene, "
+           "unbranded blank packaging, cinematic advertising still, "
+           "16:9 widescreen, photorealistic, sharp focus")
 
-# Negacion pura, para el campo `negative_prompt` del Step. Lo humano va primero
-# y muy desglosado: cara, retrato, piel y manos son cuatro conceptos distintos
-# para el modelo y hay que tumbar los cuatro.
+# Negacion pura, para el campo `negative_prompt` del Step.
+#
+# MEDIDO (2026-08-03): Pollinations ACEPTA el parametro y lo IGNORA. Prueba de
+# control: el mismo prompt "a bright red sports car" con seed fija y
+# `negative_prompt="red, crimson, scarlet, red paint"` devuelve el coche igual
+# de rojo, visualmente identico al que sale sin negativo. Por eso el trabajo
+# anti-persona vive entero en `_SUFFIX` y en `_PRODUCTS`, y no aqui.
+#
+# Se manda igualmente porque (a) no cuesta nada, (b) los conectores del modo
+# `real` (NIM, SDXL) SI lo honran, y (c) entra en la clave del corpus, asi que
+# documenta con que se genero cada imagen. Lo que NO se hace es depender de el.
 NEGATIVE_PROMPT = (
     "person, people, human, man, woman, face, portrait, headshot, model, "
     "skin, hands, fingers, arms, body, crowd, mannequin, doll, "
@@ -462,7 +509,7 @@ def scene_prompt(spec: BriefSpec, role: str) -> str:
     """Prompt visual de una escena: sujeto -> plano -> ancla -> sufijo."""
     shot = _BEAT_SHOTS.get(role, _BEAT_SHOTS["detail"])
     shot = shot.format(subject=spec.subject, surface=spec.surface)
-    return f"{shot}. {style_anchor(spec)}. {_SUFFIX}."
+    return f"{shot}. {style_anchor(spec, studio=role == 'hero')}. {_SUFFIX}."
 
 
 def keyframe_prompt(brief: str, *, n: int = 1, title: str = "", total: int = 3,
@@ -526,12 +573,18 @@ def demo() -> None:
         prompts = [keyframe_prompt(brief, n=i, title=t, total=3)
                    for i, t in ((1, "apertura"), (2, "detalle"), (3, "cierre"))]
         assert all(spec.subject in p for p in prompts), brief
-        assert all(style_anchor(spec) in p for p in prompts), brief
+        # Paleta y tratamiento IDENTICOS en las 3 (eso es la coherencia); la
+        # luz la comparten apertura y detalle, el heroe la cambia por plato.
+        assert all(spec.palette in p for p in prompts), brief
+        assert all("35mm film" in p for p in prompts), brief
+        assert all(spec.surface in p for p in (prompts[0], prompts[2])), brief
+        assert style_anchor(spec) in prompts[0] and style_anchor(spec) in prompts[1]
+        assert style_anchor(spec, studio=True) in prompts[2], brief
         # 4. ...y a la vez cuentan un arco: tres planos distintos.
         assert len({p.split(".")[0] for p in prompts}) == 3, brief
-        assert "wide establishing" in prompts[0], brief
-        assert "macro" in prompts[1], brief
-        assert "hero" in prompts[2], brief
+        assert "Wide angle establishing" in prompts[0], brief
+        assert "Macro 100mm" in prompts[1], brief
+        assert "Studio packshot" in prompts[2], brief
 
     # 5. Briefs distintos -> spots distintos (si no, la demo sale clonada).
     assert len({parse_brief(b).subject for b in briefs}) == 4

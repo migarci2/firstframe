@@ -712,7 +712,7 @@ def demo() -> None:
             assert "ACME" not in text, text
             assert "scene 1" not in text.lower(), text
             assert "no people" not in text and "face" not in text.lower(), text
-            assert "still life product photography" in text, text
+            assert "Still life product photography" in text, text
             # ...y fidelidad: lo que pide el brief tiene que llegar al modelo.
             assert "dropper bottle" in text and "white marble" in text, text
             # El arco: tres escenas, tres planos distintos, mismo ancla.
@@ -720,7 +720,8 @@ def demo() -> None:
                                    None, 0, mode="free")
                    for i, t in ((1, "apertura"), (2, "detalle"), (3, "cierre"))]
             assert len({a.split(".")[0] for a in arc}) == 3, arc
-            assert all(PR.style_anchor("serum, marmol blanco") in a for a in arc)
+            assert all(PR.parse_brief("serum, marmol blanco").palette in a
+                       for a in arc)
             assert prompt_seed(text) == prompt_seed(text), "la seed no es deterministica"
             assert prompt_seed(text) != prompt_seed(text + "!"), "la seed no depende del prompt"
 
