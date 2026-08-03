@@ -26,6 +26,7 @@ import {
 } from 'remotion';
 import {campaign as C} from './campaign';
 import timeline from './timeline.json';
+import music from './music.json';
 
 const T = C.theme;
 
@@ -88,6 +89,42 @@ const Missing: React.FC<{s: Section}> = ({s}) => (
   </AbsoluteFill>
 );
 
+/**
+ * Cama musical bajo todo el montaje.
+ *
+ * Se agacha (ducking) mientras hay locucion: la voz manda siempre. Los tramos
+ * con voz salen de `timeline.json`, asi que el ducking se calcula solo — no hay
+ * que marcar nada a mano. Y como Remotion renderiza por frame, el volumen es
+ * una funcion del frame, no una automatizacion de un editor.
+ */
+const Music: React.FC<{sections: Section[]}> = ({sections}) => {
+  const f = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  if (!music.file) return null;
+
+  const t = f / fps;
+  let at = 0;
+  let underVoice = false;
+  for (const s of sections) {
+    if (s.vo && t >= at && t < at + s.seconds) underVoice = true;
+    at += s.seconds;
+  }
+
+  const total = sections.reduce((a, s) => a + s.seconds, 0);
+  // -18 dB bajo la voz es la regla; en los huecos sube, pero nunca al frente.
+  const base = underVoice ? music.duckedVolume : music.volume;
+  const fadeIn = interpolate(t, [0, 1.5], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  const fadeOut = interpolate(t, [total - 2.5, total], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+
+  return (
+    <Audio
+      src={staticFile(`music/${music.file}`)}
+      volume={base * fadeIn * fadeOut}
+      startFrom={Math.round(music.startSeconds * fps)}
+    />
+  );
+};
+
 export const Demo: React.FC = () => {
   const {fps} = useVideoConfig();
   const secs = timeline as Section[];
@@ -95,6 +132,7 @@ export const Demo: React.FC = () => {
 
   return (
     <AbsoluteFill style={{backgroundColor: T.bg}}>
+      <Music sections={secs} />
       {secs.map((s) => {
         const from = Math.round(at * fps);
         const dur = Math.max(1, Math.round(s.seconds * fps));
