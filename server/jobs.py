@@ -145,7 +145,7 @@ def _run_job_safe(job_id: str, brief: str, scene_count: int) -> None:
     # el lock por job del assembler garantiza que se lleva el seq 1 igualmente.
     threading.Thread(
         target=assembler.start_leader, daemon=True, name=f"leader-{job_id}",
-        args=(job_id, f"generando {scene_count} escenas — {brief[:40]}")).start()
+        args=(job_id, f"generating {scene_count} scenes — {brief[:40]}")).start()
     try:
         _run_job(job_id, brief, scene_count, t0)
     except Exception as e:
