@@ -7,26 +7,68 @@
  * Nada de monoespaciada fuera del panel técnico.
  */
 
+/* ───────────────────────── fuentes ─────────────────────────
+   Vendorizadas en woff2, sin CDN: la demo funciona sin red. */
+
+@font-face {
+  font-family: 'Syne';
+  font-style: normal; font-weight: 400 800; font-display: swap;
+  src: url('/vendor/fonts/syne-1.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+                 U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+                 U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Syne';
+  font-style: normal; font-weight: 400 800; font-display: swap;
+  src: url('/vendor/fonts/syne-2.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal; font-weight: 100 800; font-display: swap;
+  src: url('/vendor/fonts/sora-0.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+                 U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+                 U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal; font-weight: 100 800; font-display: swap;
+  src: url('/vendor/fonts/sora-1.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
-  --bg:       #0d0e10;
-  --surface:  #141518;
-  --surface2: #1b1d21;
-  --line:     #26282e;
-  --line-soft:#1e2025;
+  --bg:       #0A0C0E;
+  --surface:  #101317;
+  --surface2: #171B20;
+  --line:     rgba(237,231,220,.13);
+  --line-soft:rgba(237,231,220,.07);
 
-  --ink:      #f1f2f4;
-  --ink-2:    #a7abb3;
-  --ink-3:    #6f747d;
+  --ink:      #EDE7DC;
+  --ink-2:    #9EA5A8;
+  --ink-3:    #6C7378;
 
-  --good:     #63d6a5;
-  --live:     #ffb454;
-  --bad:      #ff7b72;
+  /* Dos acentos, y sólo sobre tipografía, un punto o una regla.
+     El teal de la paleta (#2E6B72) da 3,3:1 sobre este fondo: para texto se
+     sube el tono manteniendo el matiz. */
+  --good:     #7CBEC4;
+  --live:     #E8913C;
+  /* Un rojo contenido y cálido: "Generando" ya es ámbar, así que un fallo no
+     puede compartir color con algo que va bien. */
+  --bad:      #D9705F;
 
   --r:  12px;
   --r-s: 9px;
 
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --display: 'Syne', system-ui, sans-serif;
+  --font:    'Sora', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono:    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -67,21 +109,26 @@ button { cursor: pointer; }
 }
 
 .wordmark {
+  font-family: var(--display);
   font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
+.wordmark i { color: var(--live); font-style: normal; }
 
 .linkbtn {
   background: none;
   border: 0;
   color: var(--ink-3);
-  font-size: 13.5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .14em;
   padding: 8px 10px;
   border-radius: 8px;
   transition: color .15s, background .15s;
 }
-.linkbtn:hover { color: var(--ink-2); background: var(--surface); }
+.linkbtn:hover { color: var(--live); background: var(--surface); }
 
 /* ───────────────────────────── estructura ───────────────────────────── */
 
@@ -119,10 +166,12 @@ button { cursor: pointer; }
 .newbtn:hover { background: var(--surface2); border-color: #33363d; }
 
 .side-label {
-  margin: 18px 0 6px 6px;
-  font-size: 12px;
+  margin: 18px 0 8px 6px;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
   color: var(--ink-3);
-  letter-spacing: .02em;
+  letter-spacing: .15em;
 }
 
 .joblist {
@@ -158,9 +207,12 @@ button { cursor: pointer; }
 }
 .jobrow span {
   display: block;
-  font-size: 12.5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .11em;
   color: var(--ink-3);
-  margin-top: 2px;
+  margin-top: 4px;
 }
 .jobrow span i {
   display: inline-block;
@@ -204,9 +256,11 @@ button { cursor: pointer; }
 
 .compose h1 {
   margin: 0;
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
 }
 
 .compose-sub {
@@ -343,7 +397,7 @@ button { cursor: pointer; }
   display: block;
   height: 100%;
   width: 0;
-  background: var(--ink-2);
+  background: var(--live);
   border-radius: 2px;
   transition: width .5s ease;
 }
@@ -359,9 +413,10 @@ button { cursor: pointer; }
 
 .stageinfo h2 {
   margin: 0;
+  font-family: var(--display);
   font-size: 20px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -537,8 +592,10 @@ button { cursor: pointer; }
   list-style: none;
   cursor: pointer;
   padding: 12px 20px;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .12em;
   color: var(--ink-2);
   display: flex;
   align-items: center;
@@ -723,7 +780,7 @@ button { cursor: pointer; }
   padding: 12px 16px;
   font-size: 14px;
   color: var(--ink);
-  box-shadow: 0 12px 34px rgba(0,0,0,.5);
+  box-shadow: 0 14px 40px rgba(0,0,0,.42);
   animation: rise .22s cubic-bezier(.2,.7,.3,1);
 }
 @keyframes rise { from { transform: translateY(8px); opacity: 0; } }
