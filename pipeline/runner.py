@@ -71,9 +71,9 @@ DEFAULT_SECONDS = 4.0
 # — pero en free es la diferencia entre un spot y una demo de IA cutre.
 _BEATS: list[tuple[str, str, str, str]] = [
     ("apertura",
-     "wide establishing shot, the product standing on a clean surface in a "
-     "minimal space, clearly visible in the centre of the frame, generous "
-     "negative space around it, no people",
+     "the whole product standing on a table in a wide calm interior, seen from a "
+     "few metres away, small in the frame with the room visible around it, "
+     "establishing shot, no people",
      "{brief_short}",
      "slow push-in towards the product"),
     ("detalle",
@@ -712,8 +712,13 @@ PREGEN_JOBS: list[tuple[str, str]] = [
      "un frasco de serum facial de una marca DTC, sobre marmol blanco, luz de manana"),
     ("demo-cafe",
      "una bolsa de cafe de especialidad de tueste artesanal, sobre madera oscura"),
-    ("demo-sneaker",
-     "una zapatilla de running ligera de una marca nueva, sobre asfalto mojado"),
+    # Nada de zapatillas: el brief "zapatilla de running" salia con un swoosh
+    # calcado de Nike por mucho "no logos" que lleve el prompt y "logo" que
+    # lleve el negativo — el modelo dibuja lo que vio entrenando. Un objeto sin
+    # iconografia de marca fuerte evita el problema en origen.
+    ("demo-botella",
+     "una botella termica de acero inoxidable de una marca nueva, sin logotipos, "
+     "sobre asfalto mojado de noche"),
 ]
 
 
