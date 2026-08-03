@@ -12,10 +12,10 @@ Backblaze Generative Media Hackathon · Genblaze 0.4.5 + Backblaze B2.
 
 | | |
 |---|---|
-| **Review room** | **https://firstframe.migarci2.dev/app** — access code **`BRNV-5442`** |
+| **Review room** | **https://firstframe.migarci2.dev/app** — needs the access code from the Devpost submission |
 | **Marketing page** | https://firstframe.migarci2.dev — public, no code |
 
-The room sits behind a short access code so the demo behaves like the real product.
+The room sits behind a short access code so the demo behaves like the real product. Judges: the code is in the Devpost submission, not in this repo.
 After the code you land on the projects view, with a project already in progress and a
 spot approved and sealed under Object Lock. Creating a new spot costs nothing: the
 instance runs `GEN_MODE=free` against a warm keyframe corpus.
