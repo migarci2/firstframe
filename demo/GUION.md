@@ -188,11 +188,14 @@ error**.
    en ningún tramo. Si alguien lo menciona en el vídeo, es un error.
 3. **Las reglas de lifecycle actuando.** Corren una vez al día; no hay nada que filmar.
    Se nombran en el tramo 6 y se enseñan en el README, como estaba previsto.
-4. **Vídeo que parezca un anuncio.** `DEMO_MODE=mock` genera cartas de ajuste de ffmpeg
+4. **Vídeo que parezca un anuncio.** `GEN_MODE=mock` genera cartas de ajuste de ffmpeg
    con la marca `DRAFT · FirstFrame` y el rótulo de escena. Es honesto (no hay proveedor
    de generación de vídeo disponible, `PLAN.md §0`) pero **no intentes venderlo como
    material final**: enfoca los planos a los paneles, los cronómetros y el feed, no al
    contenido del vídeo. Nunca digas «mira qué spot ha salido».
+   Si quieres **imagen generada de verdad** para un inserto, `bash demo/run_demo.sh --free`
+   usa el proveedor gratuito real — pero cuesta **~47 s por escena** y destroza el número
+   del primer fotograma. Grábalo aparte, nunca en el tramo 2.
 5. **El juez de visión dentro del flujo en vivo.** 48,7 s por llamada medidos. Va como
    inserto (5-bis) o no va.
 6. **El badge de Object Lock sin el reset previo del contador.** Con `b2_capped: true` el

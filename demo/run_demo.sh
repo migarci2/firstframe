@@ -5,6 +5,8 @@
 #   bash demo/run_demo.sh --reset      # además tira TODOS los jobs viejos y siembra de cero
 #   bash demo/run_demo.sh --no-seed    # solo levanta el servidor
 #   bash demo/run_demo.sh --fg         # servidor en primer plano (Ctrl-C para parar)
+#   bash demo/run_demo.sh --free       # imagen REAL en vez de mock (~47 s/escena): b-roll,
+#                                      # NO para el plano del primer fotograma
 #
 # La configuración de abajo es la MEDIDA hoy, no la teórica:
 #   DEMO_MODE=mock JUDGE_THRESHOLD=0 EVENTS_MODE=off HLS_SERVE_FROM=local
@@ -36,12 +38,14 @@ LOG="${FIRSTFRAME_LOG:-/tmp/firstframe-demo.log}"
 
 SEED=1
 FG=0
+GENMODE=mock
 SEED_ARGS=()
 for a in "$@"; do
   case "$a" in
     --no-seed) SEED=0 ;;
     --reset)   SEED_ARGS+=(--reset) ;;
     --fg)      FG=1 ;;
+    --free)    GENMODE=free ;;   # imagen real (Pollinations), ~47 s/escena: SOLO para b-roll
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "opción desconocida: $a" >&2; exit 2 ;;
   esac
@@ -58,6 +62,10 @@ set -a
 set +a
 
 export DEMO_MODE=mock
+# GEN_MODE gana sobre DEMO_MODE en pipeline/scenes.py. Se fija explicitamente para que un
+# GEN_MODE suelto en .env o en el shell no meta el proveedor free (imagen real, ~47 s por
+# escena medidos) en mitad de la demo y reviente el numero de primer fotograma.
+export GEN_MODE="$GENMODE"
 export JUDGE_THRESHOLD=0
 export EVENTS_MODE=off
 export HLS_SERVE_FROM=local
