@@ -1,44 +1,27 @@
 <!doctype html>
-<meta charset="utf-8">
-<title>FirstFrame — thumbnail</title>
+<meta charset="utf-8"><title>FirstFrame — thumbnail</title>
 <style>
-  /* Miniatura 1280x720 para YouTube/Devpost. Se captura a 2x -> 2560x1440.
-     Centrada, sin pie y sin halo: la marca y una linea, nada mas. */
-  @font-face {
-    font-family: 'Inter';
-    src: url('../web/vendor/fonts/inter-latin.woff2') format('woff2');
-    font-weight: 100 900; font-display: block;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1280px; height: 720px; overflow: hidden; }
-  body {
-    background: #08090a;
-    font-family: Inter, system-ui, -apple-system, sans-serif;
-    color: #f4f4f5;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    text-align: center;
-  }
-  .mark { display: flex; align-items: center; gap: 34px; }
-  .mark svg { width: 128px; height: 128px; display: block; }
-  .mark span { font-size: 96px; font-weight: 620; letter-spacing: -.032em; }
-  p {
-    margin-top: 44px; font-size: 34px; font-weight: 400;
-    letter-spacing: -.014em; color: #9ba1a8;
-  }
-  p em { font-style: normal; color: #ff6b5e; }
+  @font-face { font-family:'Inter'; src:url('../web/vendor/fonts/inter-latin.woff2') format('woff2'); font-weight:100 900; font-display:block; }
+  @font-face { font-family:'Syne'; src:url('../web/vendor/fonts/syne-1.woff2') format('woff2'); font-weight:400 800; font-display:block; }
+  @font-face { font-family:'Sora'; src:url('../web/vendor/fonts/sora-0.woff2') format('woff2'); font-weight:100 800; font-display:block; }
+  @font-face { font-family:'GeistMono'; src:url('../web/vendor/fonts/geistmono-latin.woff2') format('woff2'); font-weight:100 900; font-display:block; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1280px; height:720px; overflow:hidden; }
+  body { background:#08090a; color:#f4f4f5; font-family:GeistMono, Inter, sans-serif;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  .mark { display:flex; align-items:center; gap:22px; }
+  .mark svg { width:108px; height:108px; display:block; }
+  .mark span { font-size:78px; font-weight:500; letter-spacing:-.05em; }
+  p { margin-top:26px; font-size:30px; font-weight:400; letter-spacing:-.012em;
+       color:#9ba1a8; font-family:Inter, Inter, sans-serif; }
+  p em { font-style:normal; color:#ff6b5e; }
 </style>
-
 <div class="mark">
-  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <g fill="#FF6B5E">
-      <rect x="2" y="4" width="7" height="16" rx="1.4"/>
-      <rect x="11.4" y="4" width="3.6" height="16" rx="1" opacity=".62"/>
-      <rect x="16.9" y="4" width="2.2" height="16" rx=".8" opacity=".34"/>
-      <rect x="20.6" y="4" width="1.4" height="16" rx=".6" opacity=".18"/>
-    </g>
-  </svg>
-  <span>FirstFrame</span>
+  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g fill="#FF6B5E">
+    <rect x="2" y="4" width="7" height="16" rx="1.4"/>
+    <rect x="11.4" y="4" width="3.6" height="16" rx="1" opacity=".62"/>
+    <rect x="16.9" y="4" width="2.2" height="16" rx=".8" opacity=".34"/>
+    <rect x="20.6" y="4" width="1.4" height="16" rx=".6" opacity=".18"/>
+  </g></svg><span>FirstFrame</span>
 </div>
-
 <p>Watch it <em>before the render finishes</em>.</p>
