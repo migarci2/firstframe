@@ -346,15 +346,21 @@ button { cursor: pointer; }
 .spot { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* El monitor manda: el plano se come todo el alto que sobra y la barra de
  * transporte se queda pegada abajo, como el program monitor de una suite. */
-.videostage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+/* container-type: size da a `.videowrap` una altura CONOCIDA (100cqh) con la que
+ * calcular su propio ancho. Sin esto, `width:100%` + `max-height` chocan y el
+ * marco se queda en 2:1 con barras negras dentro del plano. */
+.videostage {
+  flex: 1; min-height: 0;
+  container-type: size;
+  display: flex; align-items: center; justify-content: center;
+}
 
 /* El mismo marco con el que la landing presenta una captura: radio de 14,
  * anillo de 1 px y un rescoldo coral muy bajo. Nada más — el plano manda. */
 .videowrap {
   position: relative;
   aspect-ratio: 16/9;
-  width: 100%; max-width: calc((100vh - 300px) * 16 / 9);
-  max-height: 100%;
+  width: min(100%, calc(100cqh * 16 / 9));
   background: #000;
   border-radius: 10px;
   overflow: hidden;
