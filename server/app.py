@@ -66,6 +66,17 @@ def _shutdown() -> None:
 
 
 # ---------------------------------------------------------------- helpers
+def _gmi_key(req: Request) -> str | None:
+    """La clave que el usuario trae en `X-GMI-Key`, si la trae.
+
+    Vive en SU navegador y viaja por cabecera solo en las peticiones que lanzan
+    generacion. Aqui no se persiste, no se registra y no se devuelve nunca: se
+    pasa al pipeline y muere con el job. El contrato entero, en pipeline/byok.py.
+    """
+    k = (req.headers.get("x-gmi-key") or "").strip()
+    return k or None
+
+
 def _err(status: int, msg: str, **extra):
     return JSONResponse({"error": msg, **extra}, status_code=status)
 
@@ -297,7 +308,7 @@ async def create_job(req: Request):
     from server import jobs
 
     j = jobs.create_job(brief, title=body.get("title"), scenes=body.get("scenes"),
-                        project=body.get("project"))
+                        project=body.get("project"), gmi_key=_gmi_key(req))
     return JSONResponse({"id": j["id"], "job": j}, status_code=201)
 
 
@@ -367,7 +378,7 @@ async def regenerate_job(job_id: str, req: Request):
     from server import jobs
 
     j = jobs.regenerate(job_id, brief=(body.get("brief") or None),
-                        scenes=body.get("scenes"))
+                        scenes=body.get("scenes"), gmi_key=_gmi_key(req))
     if j is None:
         return _err(404, "no such job")
     return {"job": j}
@@ -406,7 +417,8 @@ async def decide(job_id: str, req: Request):
     from server import jobs
 
     try:
-        j = jobs.decide(job_id, action, note=body.get("note"), scene=body.get("scene"))
+        j = jobs.decide(job_id, action, note=body.get("note"), scene=body.get("scene"),
+                        gmi_key=_gmi_key(req))
     except jobs.NotFound:
         return _err(404, "no such job")
     except jobs.NotReviewable as e:

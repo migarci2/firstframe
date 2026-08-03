@@ -162,7 +162,13 @@ def get_job_detail(job_id: str) -> dict | None:
 
 # ------------------------------------------------------------------ crear + correr
 def create_job(brief: str, title: str | None = None, scenes: int | None = None,
-               project: str | None = None) -> dict:
+               project: str | None = None, gmi_key: str | None = None) -> dict:
+    """Crea el spot y lanza el pipeline.
+
+    `gmi_key` es la clave que el usuario trae en la cabecera `X-GMI-Key`: viaja
+    como argumento del thread y NO se guarda en la base de datos. Ver
+    `pipeline/byok.py`, que es el contrato entero.
+    """
     from server import db, events
 
     db.init()
@@ -171,7 +177,7 @@ def create_job(brief: str, title: str | None = None, scenes: int | None = None,
     db.create_job(jid, brief, (title or brief)[:64], n, project=project)
     events.publish("job_update", {"job_id": jid, "job": public_job(jid)})
     events.wake()   # el poller pasa de su intervalo de reposo al de job activo
-    threading.Thread(target=_run_job_safe, args=(jid, brief, n), daemon=True,
+    threading.Thread(target=_run_job_safe, args=(jid, brief, n, gmi_key), daemon=True,
                      name=f"job-{jid}").start()
     return public_job(jid)
 
@@ -231,7 +237,8 @@ def delete_job(job_id: str) -> bool:
     return True
 
 
-def regenerate(job_id: str, brief: str | None = None, scenes: int | None = None) -> dict | None:
+def regenerate(job_id: str, brief: str | None = None, scenes: int | None = None,
+               gmi_key: str | None = None) -> dict | None:
     """Relanza la generacion con el brief que haya ahora, conservando el id del spot."""
     from server import db, events
 
@@ -246,8 +253,8 @@ def regenerate(job_id: str, brief: str | None = None, scenes: int | None = None)
     j = public_job(job_id)
     events.publish("job_update", {"job_id": job_id, "job": j})
     events.wake()
-    threading.Thread(target=_run_job_safe, args=(job_id, row["brief"], n), daemon=True,
-                     name=f"job-{job_id}").start()
+    threading.Thread(target=_run_job_safe, args=(job_id, row["brief"], n, gmi_key),
+                     daemon=True, name=f"job-{job_id}").start()
     return j
 
 
@@ -320,11 +327,16 @@ def mark_rendering(job_id: str) -> None:
         events.publish("job_update", {"job_id": job_id, "job": public_job(job_id)})
 
 
-def _run_job_safe(job_id: str, brief: str, scene_count: int) -> None:
+def _run_job_safe(job_id: str, brief: str, scene_count: int,
+                  gmi_key: str | None = None) -> None:
+    from pipeline import byok
     from server import db, events
 
     from server import assembler
 
+    # La clave se ata a ESTE thread y se suelta al terminar pase lo que pase.
+    # No hay ningun otro sitio donde quede: ni db, ni disco, ni entorno.
+    byok.set(gmi_key)
     t0 = time.time()
     db.set_status(job_id, "rendering", started_at=db.now_ms())
     events.publish("job_update", {"job_id": job_id, "job": public_job(job_id)})
@@ -337,9 +349,15 @@ def _run_job_safe(job_id: str, brief: str, scene_count: int) -> None:
     try:
         _run_job(job_id, brief, scene_count, t0)
     except Exception as e:
-        print(f"[jobs] {job_id} FALLO: {e!r}")
-        db.set_status(job_id, "failed", error=str(e)[:400])
+        # `byok.scrub` ANTES de imprimir y ANTES de escribir en la db: un
+        # stacktrace o un error de httpx que arrastrase la cabecera filtraria
+        # la clave en el log y en el campo `error` del job, que sale por la API.
+        msg = byok.scrub(repr(e))
+        print(f"[jobs] {job_id} FALLO: {msg}")
+        db.set_status(job_id, "failed", error=msg[:400])
         events.publish("job_update", {"job_id": job_id, "job": public_job(job_id)})
+    finally:
+        byok.clear()
 
 
 def _run_job(job_id: str, brief: str, scene_count: int, t0: float) -> None:
@@ -463,7 +481,14 @@ def _call_runner(runner, job_id: str, brief: str, scene_count: int, on_scene, on
             effective = gen_mode()
         except Exception:
             effective = os.getenv("GEN_MODE") or os.getenv("DEMO_MODE") or "mock"
-        if effective == "mock":
+        # Con la clave del usuario delante no se fuerza mock: la trajo justo
+        # para que su spot se genere de verdad. Sin clave, todo igual que antes.
+        try:
+            from pipeline import byok
+            byo = byok.active()
+        except Exception:
+            byo = False
+        if effective == "mock" and not byo:
             kwargs["mock"] = True
     # El juez de vision de NIM (free tier) timeoutea a los ~30 s y degrada a 0.50, que
     # esta por debajo del threshold -> otra iteracion -> otros 30 s. Con eso el first
@@ -606,7 +631,8 @@ def get_manifest(job_id: str) -> dict | None:
 
 
 # ------------------------------------------------------------------ decisiones
-def decide(job_id: str, action: str, note: str | None = None, scene: int | None = None) -> dict:
+def decide(job_id: str, action: str, note: str | None = None, scene: int | None = None,
+           gmi_key: str | None = None) -> dict:
     from server import db, events
 
     db.init()
@@ -628,14 +654,17 @@ def decide(job_id: str, action: str, note: str | None = None, scene: int | None 
     db.set_status(job_id, "rendering")
     events.publish("rejected", {"job_id": job_id, "note": note, "scene": scene,
                                 "job": public_job(job_id)})
-    threading.Thread(target=_refine_safe, args=(job_id, scene, note), daemon=True,
+    threading.Thread(target=_refine_safe, args=(job_id, scene, note, gmi_key), daemon=True,
                      name=f"refine-{job_id}").start()
     return public_job(job_id)
 
 
-def _refine_safe(job_id: str, scene: int | None, note: str | None) -> None:
+def _refine_safe(job_id: str, scene: int | None, note: str | None,
+                 gmi_key: str | None = None) -> None:
+    from pipeline import byok
     from server import assembler, db, events
 
+    byok.set(gmi_key)      # se suelta en el finally: igual que en _run_job_safe
     try:
         row = db.get_job(job_id)
         n = scene or row["scene_count"]
@@ -658,9 +687,12 @@ def _refine_safe(job_id: str, scene: int | None, note: str | None) -> None:
                                        "job": public_job(job_id)})
         events.publish("render_complete", {"job_id": job_id, "job": public_job(job_id)})
     except Exception as e:
-        print(f"[jobs] refine {job_id} fallo: {e!r}")
-        db.set_status(job_id, "in_review", error=str(e)[:300])
+        msg = byok.scrub(repr(e))       # ver _run_job_safe: nada con la clave sale de aqui
+        print(f"[jobs] refine {job_id} fallo: {msg}")
+        db.set_status(job_id, "in_review", error=msg[:300])
         events.publish("job_update", {"job_id": job_id, "job": public_job(job_id)})
+    finally:
+        byok.clear()
 
 
 def _refine_scene(job_id: str, n: int, note: str | None, take: int) -> Path:
@@ -691,8 +723,10 @@ def _refine_scene(job_id: str, n: int, note: str | None, take: int) -> Path:
     except Exception as e:
         # Sin esta traza el fallback pinta una carta de ajuste de ffmpeg y nadie se
         # entera de por que: en camara parece que el refinado "funciono".
-        print(f"[jobs] refine real fallo en {job_id}/escena {n} ({e!r}); "
-              f"cayendo al clip de ffmpeg")
+        from pipeline import byok
+
+        print(f"[jobs] refine real fallo en {job_id}/escena {n} "
+              f"({byok.scrub(repr(e))}); cayendo al clip de ffmpeg")
     out = WORK / job_id / f"scene-{n}-take{take}.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
     txt = (note or "refined take").replace("'", "").replace(":", " ")[:40]
