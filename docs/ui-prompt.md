@@ -6,8 +6,10 @@ Copy everything below the line.
 Notes before you use it:
 - The growing-playlist player is the part that resists: segments are MPEG-TS, so
   Chrome will not play them without a vendored `hls.js`.
-- The metrics band is what decides whether the demo video lands. Iterate on it
-  separately from the rest.
+- The audience is a non-technical producer. An earlier version of this prompt asked
+  for a dense engineering dashboard and the result was rejected as unusable. The
+  machinery is now hidden behind a disclosure instead of deleted, because the
+  storage and orchestration evidence still has to be reachable.
 
 ---
 
@@ -116,19 +118,42 @@ timestamp, a color-coded event type, and a detail string. Event types include
 - **Degraded banner** when object storage loses quota, explaining that playback is
   being served from local disk.
 
+## Who this is for
+
+**A producer at a content studio. Not technical.** She does not know and does not
+care what a manifest, a hash or a model provider is. Her whole flow is three steps:
+write a brief, watch the video appear, say yes or ask for changes.
+
+## The governing rule: hide the machinery, don't delete it
+
+- **Default view is calm and human.** No jargon, no identifiers, no paths, no
+  event codes. One obvious thing to do at any moment.
+- **A discreet "technical details" control** reveals everything else: provenance,
+  lineage, storage objects, the event log, retention state, the evaluation loop
+  with its scores. That view can be as dense as it likes — different audience.
+
+Translate every technical string into plain language in the main view:
+
+| Instead of | Say |
+|---|---|
+| `PRIMER FOTOGRAMA 5.8 s vs RENDER TOTAL 25 s · 4.3×` | "Puedes verlo 4 veces antes de que termine" — one number, not three |
+| `● LIVE — generando escena 3 de 3` | "Generando… ya puedes ver el principio" |
+| `pixverse-v5.6 MODEL_ERROR → fallback: seedance-2-0` | "Un proveedor falló; seguimos con otro sin perder el trabajo" |
+| `Object Lock GOVERNANCE · 30 días · approved/j_fece44/final.mp4` | "Aprobado y protegido: nadie puede borrarlo durante 30 días" |
+| `j_fece44`, `parent_run_id`, `sha256` | not in the main view at all |
+
 ## Visual direction
 
-A dense professional tool, not a landing page. Think broadcast control room or a
-video ops dashboard. Dark background, near-black panels with hairline borders,
-generous use of a monospace face for all identifiers, timestamps, paths and metrics.
-Exactly one accent color (cyan) for live/primary data, green for approved and
-success, red for live-recording and destructive, amber for in-progress.
+Calm, not dense. The video is the absolute protagonist; everything else is
+secondary. Few colors, generous whitespace, readable non-monospace type except
+where monospace earns its place. A new user should understand the screen in three
+seconds with nobody explaining it.
 
-No gradients, no glassmorphism, no decorative emoji, no illustrations, no marketing
-copy. Information density is the aesthetic. Every pixel either shows state or lets
-you act on it.
+No gradients, no glassmorphism, no decorative emoji, no marketing copy. Think of a
+tool people are glad to use every day, not a NASA control panel.
 
-All visible copy in Spanish. Identifiers, event names and paths stay as-is.
+All visible copy in Spanish. Identifiers and event names, where they survive at
+all, stay as-is.
 
 ## Data shapes
 
