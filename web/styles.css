@@ -275,14 +275,15 @@ button { cursor: pointer; }
   justify-content: center;
 }
 
+/* La caja aspira a 16:9, pero cuando el alto aprieta (p. ej. con el panel de
+   cambios abierto) se queda más baja. El marco lo pone el propio vídeo, no la
+   caja: así nunca se ven franjas negras alrededor, sólo el plano. */
 .videowrap {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   max-height: 100%;
-  border-radius: var(--r);
-  overflow: hidden;
-  background: #000;
+  background: transparent;
 }
 
 #player {
@@ -291,13 +292,14 @@ button { cursor: pointer; }
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #000;
+  border-radius: var(--r);
   display: block;
 }
 
+/* A la derecha: el pipeline quema una marca de agua "DRAFT" arriba a la izquierda. */
 .chip {
   position: absolute;
-  top: 16px; left: 16px;
+  top: 16px; right: 16px;
   display: inline-flex;
   align-items: center;
   gap: 8px;

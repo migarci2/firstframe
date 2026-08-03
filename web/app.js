@@ -107,7 +107,10 @@ var STATUS = {
   rejected:  { label: 'Rehaciendo',        tone: 'live'  },
   failed:    { label: 'No se pudo terminar', tone: 'bad' }
 };
-function statusOf(job) { return STATUS[job.status] || { label: job.status, tone: '' }; }
+function statusOf(job) {
+  if (isRefining(job)) return { label: 'Rehaciendo', tone: 'live' };
+  return STATUS[job.status] || { label: job.status, tone: '' };
+}
 
 // ¿Está rehaciendo una toma tras un rechazo? (todas las escenas ya están listas)
 function isRefining(job) {
