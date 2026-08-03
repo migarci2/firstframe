@@ -1,30 +1,37 @@
-/* FirstFrame — sala de revisión. Frontend vanilla, sin build, sin CDN.
+/* FirstFrame — frontend vanilla, sin build, sin CDN.
  *
- * Contrato: server/API.md (CONGELADO). Todo el estado llega por EventSource
- * sobre /api/events; las llamadas REST son sólo para el detalle y las acciones.
+ * Dos públicos, una app:
+ *   · Vista principal → Ana, productora. Escribe un brief, ve el vídeo mientras
+ *     se genera, aprueba o pide cambios. Cero jerga, cero identificadores.
+ *   · Panel "Detalles técnicos" → la evidencia cruda (B2, procedencia, linaje,
+ *     AgentLoop, eventos, chaos). Nada se borra: se esconde.
+ *
+ * Contrato: server/API.md (CONGELADO).
  */
 (function () {
 'use strict';
 
-/* ═════════════════════════════════ estado ═════════════════════════════════ */
+/* ═════════════════════════════ estado ═════════════════════════════ */
 
 var S = {
-  jobs: [],            // Job[] ordenados, más reciente primero
-  sel: null,           // job_id seleccionado
-  detail: null,        // { job, provider_events, decisions, objects }
-  segs: {},            // job_id -> nº de segment_landed vistos
-  feed: [],            // últimos eventos (todos los jobs)
-  iters: {},           // job_id -> entradas del AgentLoop
-  chaos: {},           // provider -> dead:bool
+  jobs: [],
+  sel: null,
+  detail: null,
+  view: 'compose',     // 'compose' | 'spot'
+  scenes: 4,
+  segs: {},
+  feed: [],
+  iters: {},
+  chaos: {},
   health: null,
-  hideFailed: false,   // el revisor no quiere ver renders muertos
-  nowTimer: null
+  techOpen: false,
+  tick: null
 };
 
-var FEED_MAX = 120;
+var FEED_MAX = 140;
 var CHAOS_PROVIDERS = ['gmicloud', 'nim', 'openai', 'replicate'];
 
-/* ═════════════════════════════════ utilidades ═════════════════════════════ */
+/* ═════════════════════════════ utilidades ═════════════════════════════ */
 
 function $(id) { return document.getElementById(id); }
 
@@ -35,50 +42,14 @@ function el(tag, cls, text) {
   return n;
 }
 
-function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-
-// "7.1 s" / "2:43" — números pensados para leerse en cámara.
-function fmtDur(ms) {
-  if (ms == null || isNaN(ms)) return '—';
-  var s = ms / 1000;
-  if (s < 60) return (s < 10 ? s.toFixed(1) : Math.round(s)) + ' s';
-  var m = Math.floor(s / 60);
-  var r = Math.round(s % 60);
-  if (r === 60) { m++; r = 0; }
-  return m + ':' + (r < 10 ? '0' : '') + r;
-}
-
-function fmtClock(ts) {
-  var d = new Date(ts);
-  return String(d.getHours()).padStart(2, '0') + ':' +
-         String(d.getMinutes()).padStart(2, '0') + ':' +
-         String(d.getSeconds()).padStart(2, '0');
-}
-
-function fmtTC(sec) {
-  if (!isFinite(sec) || sec < 0) sec = 0;
-  var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-  return m + ':' + (s < 10 ? '0' : '') + s;
-}
-
-function segLabel(n) { return n + (n === 1 ? ' segmento en B2' : ' segmentos en B2'); }
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 
 function jobById(id) {
   for (var i = 0; i < S.jobs.length; i++) if (S.jobs[i].id === id) return S.jobs[i];
   return null;
 }
-
 function selJob() { return S.sel ? jobById(S.sel) : null; }
-
-function isLive(job) { return job && (job.status === 'rendering' || job.status === 'queued'); }
-
-// Escena que se está generando ahora mismo (1-indexada).
-function currentScene(job) {
-  var sc = job.scenes || [];
-  for (var i = 0; i < sc.length; i++) if (sc[i].status === 'rendering') return sc[i].n;
-  for (var j = 0; j < sc.length; j++) if (sc[j].status === 'pending') return sc[j].n;
-  return sc.length ? sc[sc.length - 1].n : 1;
-}
+function isLive(j) { return j && (j.status === 'rendering' || j.status === 'queued'); }
 
 function api(path, opts) {
   opts = opts || {};
@@ -101,119 +72,161 @@ function api(path, opts) {
   });
 }
 
-/* ═════════════════════════════════ toasts ═════════════════════════════════ */
+/* ═════════════════ traducción a lenguaje humano ═════════════════ */
 
-function toast(kind, head, bodyNode, ttl) {
+// "6 segundos", "1 minuto y 44 segundos" — se lee en voz alta sin tropezar.
+function humanSecs(ms) {
+  if (ms == null || isNaN(ms)) return '';
+  var s = Math.max(1, Math.round(ms / 1000));
+  if (s < 60) return s + (s === 1 ? ' segundo' : ' segundos');
+  var m = Math.floor(s / 60), r = s % 60;
+  var out = m + (m === 1 ? ' minuto' : ' minutos');
+  if (r) out += ' y ' + r + (r === 1 ? ' segundo' : ' segundos');
+  return out;
+}
+
+function daysLeft(iso) {
+  var d = Date.parse(iso);
+  if (isNaN(d)) return 30;
+  return Math.max(1, Math.round((d - Date.now()) / 86400000));
+}
+
+// El identificador del job no pinta nada delante de Ana: se usa el título.
+function spotTitle(job) {
+  var t = (job.title || job.brief || '').trim();
+  if (!t) return 'Spot sin título';
+  if (t.length > 70) t = t.slice(0, 68).replace(/[\s,;.]+$/, '') + '…';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+var STATUS = {
+  queued:    { label: 'Preparando',        tone: 'live'  },
+  rendering: { label: 'Generando',         tone: 'live'  },
+  in_review: { label: 'Listo para revisar', tone: 'ready' },
+  approved:  { label: 'Aprobado',          tone: 'good'  },
+  rejected:  { label: 'Rehaciendo',        tone: 'live'  },
+  failed:    { label: 'No se pudo terminar', tone: 'bad' }
+};
+function statusOf(job) { return STATUS[job.status] || { label: job.status, tone: '' }; }
+
+// ¿Está rehaciendo una toma tras un rechazo? (todas las escenas ya están listas)
+function isRefining(job) {
+  var sc = job.scenes || [];
+  return isLive(job) && sc.length > 0 &&
+         sc.every(function (s) { return s.status === 'ready'; });
+}
+
+/* La frase única del escenario. Un número, no tres: sigue siendo el argumento
+ * del producto, pero dicho como se lo dirías a una persona. */
+function sayLine(job) {
+  var ff = job.first_frame_ms, total = job.total_render_ms;
+
+  if (job.status === 'failed') {
+    return { text: 'No pudimos terminar este spot. Puedes volver a intentarlo con el mismo texto.', tone: 'bad' };
+  }
+
+  if (job.status === 'approved') {
+    var d = job.lock ? daysLeft(job.lock.retain_until) : 30;
+    return { text: 'Aprobado y protegido: nadie puede borrarlo ni modificarlo durante ' +
+                   d + ' días.', tone: 'good' };
+  }
+
+  if (isRefining(job)) {
+    return { text: 'Estamos rehaciendo esa parte. La verás aquí en cuanto esté lista.', tone: '' };
+  }
+
+  if (isLive(job)) {
+    if (ff == null) return { text: 'Generando… en cuanto haya imagen empieza sola.', tone: '' };
+    return { text: 'Ya puedes ver el principio: apareció en ' + humanSecs(ff) + '.', tone: '' };
+  }
+
+  // in_review / rejected: aquí es donde se cobra la promesa del producto.
+  if (ff != null && total) {
+    var ratio = total / ff;
+    if (ratio >= 1.8) {
+      return { text: 'Pudiste verlo ' + Math.round(ratio) +
+                     ' veces antes de que terminara de generarse.', tone: '' };
+    }
+    return { text: 'Estuvo listo para ver ' + humanSecs(total - ff) + ' antes de terminar.', tone: '' };
+  }
+  return { text: 'Listo para revisar.', tone: '' };
+}
+
+/* ═════════════════════════════ toasts ═════════════════════════════ */
+
+function toast(kind, text, sub, ttl) {
   var t = el('div', 'toast ' + (kind || ''));
-  t.appendChild(el('div', 'toast-h', head));
-  var b = el('div', 'toast-b');
-  if (typeof bodyNode === 'string') b.textContent = bodyNode; else b.appendChild(bodyNode);
-  t.appendChild(b);
+  t.appendChild(document.createTextNode(text));
+  if (sub) t.appendChild(el('small', null, sub));
   var box = $('toasts');
   box.appendChild(t);
-  // Como mucho 3 en pantalla: un muro de toasts tapa el vídeo.
   while (box.children.length > 3) box.removeChild(box.firstChild);
   setTimeout(function () {
     t.classList.add('out');
-    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 280);
-  }, ttl || 8000);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+  }, ttl || 7000);
   return t;
 }
 
-// "pixverse-v5.6 MODEL_ERROR → fallback: seedance-2-0"
-function failoverToast(d) {
-  var b = el('span');
-  b.appendChild(el('span', 'from', (d.model || 'modelo') + ' MODEL_ERROR'));
-  b.appendChild(el('span', 'arrow', '→'));
-  b.appendChild(el('span', 'to', 'fallback: ' + (d.fallback_model || '—')));
-  var head = 'Failover de proveedor' + (d.provider ? ' · ' + d.provider : '') +
-             (d.scene ? ' · escena ' + d.scene : '');
-  toast('failover', head, b, 11000);
-}
-
-/* ═════════════════════════════════ player ═════════════════════════════════ */
+/* ═════════════════════════════ player ═════════════════════════════ */
 
 var Player = {
-  jobId: null,
-  engine: null,
-  hls: null,
-  mse: null,
-  frags: 0,
-  autoplayed: false,
-
-  video: null,
+  jobId: null, engine: '—', hls: null, mse: null, frags: 0, autoplayed: false, video: null,
 
   init: function () {
     this.video = $('player');
-    var v = this.video;
-    v.addEventListener('timeupdate', updateTimecode);
-    v.addEventListener('durationchange', updateTimecode);
-    v.addEventListener('play',  function () { $('btn-play').textContent = 'Pause'; });
-    v.addEventListener('pause', function () { $('btn-play').textContent = 'Play'; });
-    $('btn-play').addEventListener('click', function () {
-      if (v.paused) { v.play().catch(function () {}); } else { v.pause(); }
-    });
   },
 
-  note: function (msg, isErr) {
-    var n = $('player-note');
-    if (!msg) { n.hidden = true; return; }
-    n.textContent = msg;
-    n.className = 'player-note' + (isErr ? ' err' : '');
-    n.hidden = false;
+  veil: function (msg) {
+    var v = $('veil');
+    if (!msg) { v.hidden = true; return; }
+    $('veil-text').textContent = msg;
+    v.hidden = false;
   },
 
-  setEngine: function (name) {
-    this.engine = name;
-    $('engine-badge').textContent = name;
-  },
+  setEngine: function (n) { this.engine = n; renderTechChips(); },
 
   teardown: function () {
     if (this.hls) { try { this.hls.destroy(); } catch (e) {} this.hls = null; }
     if (this.mse) { try { this.mse.destroy(); } catch (e) {} this.mse = null; }
-    this.frags = 0;
-    this.autoplayed = false;
+    this.frags = 0; this.autoplayed = false;
     try { this.video.removeAttribute('src'); this.video.load(); } catch (e) {}
   },
 
-  /** Arranca (o reengancha) el stream de un job. */
   load: function (job, opts) {
     opts = opts || {};
     var url = job.stream_url || ('/stream/' + job.id + '/index.m3u8');
     var self = this;
 
     if (this.jobId === job.id && this.hls && opts.reattach) {
-      // Reject: la playlist ya llevaba ENDLIST, hls.js la trata como VOD.
-      // Hay que volver a loadSource() para ver la toma refinada (API.md §decision).
-      this.note('Reenganchando al stream: la escena refinada se añade a la misma playlist…');
+      // Tras un rechazo la playlist ya llevaba ENDLIST y hls.js la trata como VOD:
+      // hay que volver a loadSource() para ver la toma refinada (API.md §decision).
       this.frags = 0; this.autoplayed = false;
+      this.veil('Enganchando con la nueva versión…');
       this.hls.loadSource(url);
       return;
     }
 
     this.teardown();
     this.jobId = job.id;
-    this.note(isLive(job)
-      ? 'Esperando el primer segmento en B2… el player arranca con 2 segmentos.'
-      : null);
+    this.veil(isLive(job) ? 'Preparando el primer plano…' : null);
 
-    // ?player=mse|native fuerza el motor (para probar el plan B sin tocar código).
     var forced = (/[?&]player=(\w+)/.exec(location.search) || [])[1];
     if (forced === 'mse') { this.fallbackMse(url); return; }
     if (forced === 'native') {
       this.setEngine('nativo');
       this.video.src = url;
       this.video.play().catch(function () {});
+      this.veil(null);
       return;
     }
 
-    // 1) hls.js (vendorizado en web/vendor/, sin CDN).
+    // 1) hls.js (vendorizado en web/vendor/, sin CDN). Los segmentos son MPEG-TS.
     if (window.Hls && window.Hls.isSupported()) {
       this.setEngine('hls.js');
       var hls = new window.Hls({
         enableWorker: true,
         lowLatencyMode: false,
-        // La playlist puede tardar un par de segundos en existir tras el POST.
         manifestLoadingMaxRetry: 30,
         manifestLoadingRetryDelay: 700,
         manifestLoadingMaxRetryTimeout: 4000,
@@ -228,61 +241,51 @@ var Player = {
       hls.attachMedia(this.video);
       hls.on(window.Hls.Events.MEDIA_ATTACHED, function () { hls.loadSource(url); });
 
-      // La playlist crece mientras el backend sube segmentos: el contador
-      // refleja lo que hay realmente publicado, no sólo lo que vio el SSE.
       hls.on(window.Hls.Events.LEVEL_UPDATED, function (_e, data) {
-        var n = data && data.details && data.details.fragments ? data.details.fragments.length : 0;
-        if (self.jobId === S.sel) {
-          S.segs[self.jobId] = Math.max(S.segs[self.jobId] || 0, n);
-          $('seg-counter').textContent = segLabel(S.segs[self.jobId]);
-        }
+        var n = (data && data.details && data.details.fragments) ? data.details.fragments.length : 0;
+        S.segs[self.jobId] = Math.max(S.segs[self.jobId] || 0, n);
+        if (self.jobId === S.sel) renderTechChips();
       });
 
       hls.on(window.Hls.Events.FRAG_BUFFERED, function () {
         self.frags++;
-        // Arrancamos con 2 segmentos de colchón (§9.1 del plan): ni antes
-        // (se queda sin buffer) ni al final (perderíamos el argumento).
+        // Arrancamos con 2 segmentos de colchón: ni antes (se queda sin buffer)
+        // ni al final (perderíamos el argumento del producto).
         if (!self.autoplayed && self.frags >= 2) {
           self.autoplayed = true;
-          self.note(null);
+          self.veil(null);
           self.video.play().catch(function () {
-            self.note('Autoplay bloqueado por el navegador — pulsa Play.');
+            self.veil(null);   // el navegador bloqueó el autoplay: los controles nativos bastan
           });
         }
       });
 
       hls.on(window.Hls.Events.ERROR, function (_e, data) {
         if (!data.fatal) {
-          // bufferStalledError / bufferNudgeOnStall mientras se genera la
-          // siguiente escena son NORMALES (API.md): hls.js se recupera solo.
-          if (data.details === 'bufferStalledError' || data.details === 'bufferNudgeOnStall') {
-            if (isLive(selJob())) self.note('Buffer al día: esperando la siguiente escena…');
-            return;
-          }
-          if (data.details === 'fragLoadError' || data.details === 'levelEmptyError') return;
+          // bufferStalledError mientras se genera la escena siguiente es NORMAL
+          // (API.md): hls.js se recupera solo. No es un error para el usuario.
           return;
         }
         if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
-          self.note('Error de red en el stream (' + data.details + '). Reintentando…', true);
+          pushFeed('error', self.jobId, 'hls network: ' + data.details);
           try { hls.startLoad(); } catch (e) {}
         } else if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
-          self.note('Error de media (' + data.details + '). Recuperando…', true);
+          pushFeed('error', self.jobId, 'hls media: ' + data.details);
           try { hls.recoverMediaError(); } catch (e) {}
         } else {
-          self.note('hls.js no pudo reproducir (' + data.details + '); pasando a MSE.', true);
+          pushFeed('error', self.jobId, 'hls fatal: ' + data.details + ' → MSE');
           self.fallbackMse(url);
         }
       });
       return;
     }
 
-    // 2) MSE propio (web/mse.js).
     if (window.FFMse && window.FFMse.isSupported()) { this.fallbackMse(url); return; }
 
-    // 3) HLS nativo (Safari / iOS).
     this.setEngine('nativo');
     this.video.src = url;
     this.video.play().catch(function () {});
+    this.veil(null);
   },
 
   fallbackMse: function (url) {
@@ -291,346 +294,373 @@ var Player = {
     if (!window.FFMse || !window.FFMse.isSupported()) {
       this.setEngine('nativo');
       this.video.src = url;
+      this.veil(null);
       return;
     }
     this.setEngine('mse');
     var p = window.FFMse.create(this.video);
     this.mse = p;
 
-    // Chrome declara soportar 'video/mp2t' pero su demuxer aborta en la frontera
-    // de escena ("Parsed buffers not in DTS sequence"): por eso hls.js remuxa a
-    // fMP4 y es el motor primario. Aquí lo detectamos por el error del <video>
-    // (no llega como evento nuestro) y degradamos con un mensaje visible.
+    var toNative = function (why) {
+      pushFeed('error', self.jobId, 'mse → nativo: ' + why);
+      try { p.destroy(); } catch (e) {}
+      self.mse = null;
+      self.setEngine('nativo');
+      self.video.src = url;
+      self.video.play().catch(function () {});
+      self.veil(null);
+    };
+
     var onMediaErr = function () {
       if (self.mse !== p) return;
-      var why = (self.video.error && self.video.error.message) || 'error de media';
       self.video.removeEventListener('error', onMediaErr);
-      self.note('MSE no puede con estos segmentos MPEG-TS (' + why.split(':')[0] +
-                '); usando el player nativo.', true);
-      try { p.destroy(); } catch (err) {}
-      self.mse = null;
-      self.setEngine('nativo');
-      self.video.src = url;
-      self.video.play().catch(function () {});
+      toNative((self.video.error && self.video.error.message) || 'media error');
     };
     this.video.addEventListener('error', onMediaErr);
+
     p.on('ready', function () {
-      self.note(null);
-      self.video.play().catch(function () {
-        self.note('Autoplay bloqueado por el navegador — pulsa Play.');
-      });
-    });
-    p.on('error', function (e) {
-      if (!e.fatal) return;
-      // Chrome no acepta MPEG-TS por MSE (por eso hls.js remuxa). Degradamos al
-      // player nativo y lo decimos, en vez de quedarnos en negro.
-      self.note('MSE no puede con estos segmentos (' + e.reason + '); usando el player nativo.', true);
-      try { p.destroy(); } catch (err) {}
-      self.mse = null;
-      self.setEngine('nativo');
-      self.video.src = url;
+      self.veil(null);
       self.video.play().catch(function () {});
     });
+    p.on('error', function (e) { if (e.fatal) toNative(e.reason); });
     p.load(url);
   }
 };
 
-function updateTimecode() {
-  var v = Player.video;
-  var d = isFinite(v.duration) ? v.duration : 0;
-  $('timecode').textContent = fmtTC(v.currentTime) + ' / ' + fmtTC(d);
+/* ═════════════════════════════ vistas ═════════════════════════════ */
+
+function showCompose() {
+  S.view = 'compose';
+  S.sel = null;
+  Player.teardown();
+  $('view-compose').hidden = false;
+  $('view-spot').hidden = true;
+  $('changes').hidden = true;
+  renderJobs();
+  renderTech();
+  setTimeout(function () { $('brief').focus(); }, 30);
 }
 
-/* ═════════════════════════════ render: lista de jobs ══════════════════════ */
+function select(id, opts) {
+  opts = opts || {};
+  var job = jobById(id);
+  if (!job) return;
+  var changed = S.sel !== id;
+  S.sel = id;
+  S.view = 'spot';
 
-function visibleJobs() {
-  if (!S.hideFailed) return S.jobs;
-  return S.jobs.filter(function (j) { return j.status !== 'failed' || j.id === S.sel; });
+  $('view-compose').hidden = true;
+  $('view-spot').hidden = false;
+  if (changed) $('changes').hidden = true;
+
+  if (changed || opts.force) Player.load(job);
+
+  renderJobs();
+  renderStage();
+  renderTech();
+  loadDetail(id);
 }
+
+/* ═════════════════════════ lateral: los spots ═════════════════════════ */
 
 function renderJobs() {
   var list = $('joblist');
-  var scroll = list.scrollTop;   // un job_update cada segundo no debe mover la lista
+  var scroll = list.scrollTop;
   clear(list);
-  var shown = visibleJobs();
-  $('jobs-count').textContent = shown.length === S.jobs.length
-    ? String(S.jobs.length)
-    : shown.length + '/' + S.jobs.length;
 
-  if (!shown.length) {
-    list.appendChild(el('div', 'empty', S.jobs.length
-      ? 'Todos los jobs están en estado "failed". Pulsa "todos" para verlos.'
-      : 'No hay jobs todavía. Pega un brief arriba y pulsa "New spot".'));
-    list.scrollTop = scroll;
+  if (!S.jobs.length) {
+    list.appendChild(el('div', 'side-empty', 'Todavía no has creado ninguno.'));
     return;
   }
 
-  shown.forEach(function (job) {
+  S.jobs.forEach(function (job) {
     var row = el('button', 'jobrow' + (job.id === S.sel ? ' sel' : ''));
     row.type = 'button';
-    row.setAttribute('data-job', job.id);
-
-    var top = el('div', 'jobrow-top');
-    top.appendChild(el('span', 'jobrow-id', job.id));
-    top.appendChild(el('span', 'pill ' + job.status, job.status.replace('_', ' ')));
-    row.appendChild(top);
-
-    row.appendChild(el('div', 'jobrow-title', job.title || job.brief || '(sin título)'));
-
-    var meta = el('div', 'jobrow-meta');
-    meta.appendChild(el('span', 'ff', job.first_frame_ms != null ? 'ff ' + fmtDur(job.first_frame_ms) : 'ff —'));
-    meta.appendChild(el('span', null, job.total_render_ms != null ? fmtDur(job.total_render_ms) : '·'));
-    var bars = el('div', 'minibars');
-    (job.scenes || []).forEach(function (s) { bars.appendChild(el('i', 'minibar ' + s.status)); });
-    meta.appendChild(bars);
-    row.appendChild(meta);
-
+    row.appendChild(el('b', null, spotTitle(job)));
+    var st = statusOf(job);
+    var s = el('span', 't-' + st.tone);
+    s.appendChild(el('i'));
+    s.appendChild(document.createTextNode(st.label));
+    row.appendChild(s);
     row.addEventListener('click', function () { select(job.id); });
     list.appendChild(row);
   });
   list.scrollTop = scroll;
 }
 
-/* ═════════════════════════════ render: cronómetros ════════════════════════ */
+/* ═════════════════════════ escenario ═════════════════════════ */
 
-function renderTimers() {
+function renderStage() {
   var job = selJob();
-  var box = $('timers');
-  if (!job) {
-    box.classList.add('pending');
-    $('t-first').textContent = '—';
-    $('t-total').textContent = '—';
-    $('gain-x').textContent = '—';
-    $('tb-first').style.width = '0%';
-    return;
-  }
+  if (!job || S.view !== 'spot') return;
 
-  var ff = job.first_frame_ms;
-  // Mientras renderiza no hay total: enseñamos el cronómetro corriendo, que es
-  // justo el contraste que queremos en cámara (7 s fijos vs total subiendo).
-  var live = isLive(job);
-  var total = job.total_render_ms;
-  if (total == null && live && job.created_at) total = Date.now() - job.created_at;
+  $('spot-title').textContent = spotTitle(job);
 
-  box.classList.toggle('pending', ff == null);
-  $('t-first').textContent = fmtDur(ff);
-  $('t-total').textContent = fmtDur(total);
-  $('tb-legend-first').textContent = ff != null ? 'primer fotograma · ' + fmtDur(ff) : 'primer fotograma';
+  var say = sayLine(job);
+  var p = $('spot-line');
+  p.className = 'say ' + say.tone;
+  p.textContent = say.text;
 
-  if (ff != null && total) {
-    var ratio = total / ff;
-    $('gain-x').textContent = (ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)) + '×';
-    $('tb-first').style.width = Math.max(1.5, Math.min(100, (ff / total) * 100)).toFixed(1) + '%';
-  } else {
-    $('gain-x').textContent = '—';
-    $('tb-first').style.width = '0%';
-  }
-  $('t-gain').style.visibility = (ff != null && total) ? 'visible' : 'hidden';
-}
-
-/* ═════════════════════════════ render: escenas + LIVE ═════════════════════ */
-
-function renderScenes() {
-  var job = selJob();
-  var strip = $('scenestrip');
-  clear(strip);
-  if (!job) { $('scenes-progress').textContent = '—'; return; }
-
-  var scenes = job.scenes || [];
-  var ready = scenes.filter(function (s) { return s.status === 'ready'; }).length;
-  $('scenes-progress').textContent = ready + '/' + (job.scene_count || scenes.length);
-
-  scenes.forEach(function (s) {
-    var extra = scenes.length > (job.scene_count || scenes.length) && s.n > job.scene_count ? ' refined' : '';
-    var c = el('div', 'scene ' + s.status + extra);
-    var n = el('div', 'scene-n');
-    n.appendChild(el('span', null, 'ESCENA ' + s.n));
-    n.appendChild(el('span', 'st', s.status));
-    c.appendChild(n);
-    c.appendChild(el('div', 'scene-title', s.title || '—'));
-    c.appendChild(el('div', 'scene-ms', s.ms != null ? fmtDur(s.ms) : (s.status === 'rendering' ? 'generando…' : '—')));
-    strip.appendChild(c);
-  });
-
-  // Badge LIVE
-  var badge = $('live-badge');
+  // Chip sobre el vídeo: sólo mientras algo está pasando.
+  var chip = $('chip-live');
   if (isLive(job)) {
-    badge.hidden = false;
-    var pend = scenes.filter(function (s) { return s.status !== 'ready'; }).length;
-    // Tras un rechazo el job vuelve a "rendering" con todas las escenas ya
-    // listas: lo que se está generando es la toma refinada, no una escena nueva.
-    $('live-text').textContent = pend === 0
-      ? 'LIVE — refinando la toma rechazada'
-      : 'LIVE — generando escena ' + currentScene(job) + ' de ' + (job.scene_count || scenes.length);
+    chip.hidden = false;
+    $('chip-live-text').textContent = isRefining(job) ? 'Rehaciendo' : 'Generando';
   } else {
-    badge.hidden = true;
+    chip.hidden = true;
   }
+
+  // Progreso: una línea de 2 px, sin números ni contadores.
+  var scenes = job.scenes || [];
+  var total = job.scene_count || scenes.length || 1;
+  var ready = scenes.filter(function (s) { return s.status === 'ready'; }).length;
+  var bar = $('progress');
+  if (isLive(job) && !isRefining(job)) {
+    bar.hidden = false;
+    $('progress-fill').style.width = Math.round((ready / total) * 100) + '%';
+  } else {
+    bar.hidden = true;
+  }
+
+  renderActions(job);
+  renderNoteScenes(job);
 }
 
-/* ═════════════════════════════ render: revisión ═══════════════════════════ */
+// En cada momento, una sola cosa evidente que hacer.
+function renderActions(job) {
+  var box = $('stage-actions');
+  clear(box);
 
-function renderReview() {
-  var job = selJob();
-  var approve = $('btn-approve'), reject = $('btn-reject');
-  var hint = $('review-hint'), lock = $('lockbadge');
-  var sel = $('reject-scene');
+  if (job.status === 'in_review' || job.status === 'rejected') {
+    var chg = el('button', 'ghost', 'Pedir cambios');
+    chg.type = 'button';
+    chg.addEventListener('click', openChanges);
+    box.appendChild(chg);
 
+    var ok = el('button', 'primary', 'Aprobar');
+    ok.type = 'button';
+    ok.addEventListener('click', function () { ok.disabled = true; decide('approve'); });
+    box.appendChild(ok);
+    return;
+  }
+
+  if (job.status === 'approved') {
+    var dl = el('button', 'primary', 'Descargar');
+    dl.type = 'button';
+    dl.addEventListener('click', function () { download(job); });
+    box.appendChild(dl);
+    return;
+  }
+
+  if (job.status === 'failed') {
+    var retry = el('button', 'primary', 'Volver a intentarlo');
+    retry.type = 'button';
+    retry.addEventListener('click', function () {
+      $('brief').value = job.brief || job.title || '';
+      showCompose();
+    });
+    box.appendChild(retry);
+  }
+  // Mientras genera no hay nada que decidir: la acción es mirar.
+}
+
+function renderNoteScenes(job) {
+  var sel = $('note-scene');
+  var keep = sel.value;
   clear(sel);
-  var opt0 = el('option', null, 'última'); opt0.value = ''; sel.appendChild(opt0);
-  if (job) (job.scenes || []).forEach(function (s) {
-    var o = el('option', null, 'escena ' + s.n); o.value = String(s.n); sel.appendChild(o);
+  var o0 = el('option', null, 'la última escena'); o0.value = ''; sel.appendChild(o0);
+  (job.scenes || []).forEach(function (s) {
+    var o = el('option', null, 'la escena ' + s.n);
+    o.value = String(s.n);
+    sel.appendChild(o);
   });
-
-  if (!job) {
-    approve.disabled = reject.disabled = true;
-    lock.hidden = true;
-    hint.hidden = false;
-    hint.textContent = 'Selecciona un job en revisión para aprobarlo o rechazarlo.';
-    return;
-  }
-
-  var reviewable = job.status === 'in_review' || job.status === 'rejected';
-  approve.disabled = !reviewable;
-  reject.disabled = !reviewable;
-
-  if (job.lock) {
-    lock.hidden = false;
-    $('lock-until').textContent = 'retención hasta ' + job.lock.retain_until +
-                                  ' · approved/' + job.id + '/final.mp4';
-    hint.hidden = true;
-  } else {
-    lock.hidden = true;
-    hint.hidden = false;
-    hint.className = 'review-hint' + (job.status === 'failed' ? ' err' : '');
-    hint.textContent = reviewable
-      ? 'Reject relanza la escena con el AgentLoop; Approve sube el final con Object Lock.'
-      : (isLive(job) ? 'Render en curso — puedes ver ya el segundo 0:00 mientras se genera.'
-                     : 'Job en estado "' + job.status + '"' + (job.error ? ': ' + job.error : '') + '.');
-    hint.title = hint.textContent;
-  }
+  sel.value = keep;
 }
 
-/* ═════════════════════════════ render: AgentLoop ══════════════════════════ */
-
-function agentEntries(jobId) { return S.iters[jobId] || (S.iters[jobId] = []); }
-
-function pushIter(jobId, entry) {
-  var arr = agentEntries(jobId);
-  arr.push(entry);
-  if (jobId === S.sel) renderAgentLoop();
+function openChanges() {
+  $('changes').hidden = false;
+  $('note').focus();
 }
 
-function renderAgentLoop() {
-  var body = $('agentloop-body');
-  clear(body);
-  var arr = S.sel ? agentEntries(S.sel) : [];
-  $('agentloop-count').textContent = arr.length;
+/* ═════════════════════════ acciones ═════════════════════════ */
 
-  if (!arr.length) {
-    body.appendChild(el('div', 'empty',
-      'Sin iteraciones del juez todavía.\nRechaza una toma para ver el AgentLoop: el juez de visión puntúa, refina el prompt y relanza la escena.'));
-    return;
+function createSpot() {
+  var brief = $('brief').value.trim();
+  if (!brief) {
+    brief = 'Un spot de 15 segundos para una zapatilla de running. Luz de amanecer, ciudad vacía.';
+    $('brief').value = brief;
   }
+  var btn = $('btn-create');
+  btn.disabled = true;
+  btn.textContent = 'Creando…';
 
-  arr.slice().reverse().forEach(function (it) {
-    var n = el('div', 'iter');
-    var top = el('div', 'iter-top');
-    top.appendChild(el('span', null, fmtClock(it.at)));
-    top.appendChild(el('span', null, it.scene ? 'escena ' + it.scene : 'job'));
-    if (it.iteration != null) top.appendChild(el('span', null, 'iter ' + it.iteration));
-    if (it.score != null) {
-      var sc = el('span', 'iter-score ' + (it.score >= 0.6 ? 'high' : 'low'), it.score.toFixed(2));
-      top.appendChild(sc);
-    }
-    n.appendChild(top);
-
-    if (it.score != null) {
-      var bar = el('div', 'iter-bar');
-      var fill = el('i', it.score >= 0.6 ? 'high' : '');
-      fill.style.width = Math.max(2, Math.min(100, it.score * 100)) + '%';
-      bar.appendChild(fill);
-      n.appendChild(bar);
-    }
-    if (it.reason) n.appendChild(el('div', 'iter-reason', it.reason));
-    if (it.action) n.appendChild(el('div', 'iter-act', it.action));
-    body.appendChild(n);
+  api('/api/jobs', { method: 'POST', body: {
+    brief: brief, title: brief.slice(0, 70), scenes: S.scenes
+  }}).then(function (d) {
+    var job = d.job || { id: d.id, status: 'queued', title: brief.slice(0, 70) };
+    upsertJob(job);
+    S.sel = null;
+    select(job.id, { force: true });
+    $('brief').value = '';
+    pushFeed('job_update', job.id, 'job creado · pipeline arrancado');
+  }).catch(function (e) {
+    toast('bad', 'No pudimos crear el spot.', 'Inténtalo otra vez en unos segundos.', 9000);
+    pushFeed('error', null, 'POST /api/jobs: ' + e.message);
+  }).then(function () {
+    btn.disabled = false;
+    btn.textContent = 'Crear spot';
   });
 }
 
-/* ═════════════════════════════ render: provenance ═════════════════════════ */
+function decide(action, note, scene) {
+  var job = selJob();
+  if (!job) return;
+  var body = { action: action, note: note || '' };
+  if (action === 'reject' && scene) body.scene = parseInt(scene, 10);
 
-function renderProvenance() {
-  var body = $('provenance-body');
+  api('/api/jobs/' + job.id + '/decision', { method: 'POST', body: body })
+    .then(function (d) {
+      if (d.job) upsertJob(d.job);
+      if (action === 'reject') {
+        $('changes').hidden = true;
+        $('note').value = '';
+        toast('', 'Tomamos nota.', 'Estamos rehaciendo esa parte; la verás aquí en cuanto esté.', 8000);
+        pushIter(job.id, { _live: true, at: Date.now(), scene: body.scene || null,
+                           reason: 'Rechazo de la productora: "' + (note || 'sin nota') + '"',
+                           action: 'toma a rejected/ · AgentLoop relanza la escena' });
+        var j = jobById(job.id);
+        if (j) Player.load(j, { reattach: true });
+      }
+      renderStage();
+    })
+    .catch(function (e) {
+      var msg = e.status === 409
+        ? 'Este spot todavía se está generando. Espera a que termine.'
+        : 'No pudimos guardar tu decisión. Inténtalo de nuevo.';
+      toast('bad', msg, null, 9000);
+      pushFeed('error', job.id, 'decision ' + action + ': ' + e.message);
+      renderStage();
+    });
+}
+
+function download(job) {
+  api('/api/download/' + job.id).then(function (d) {
+    if (d && d.url) window.open(d.url, '_blank', 'noopener');
+    else toast('bad', 'La descarga no está disponible ahora mismo.', null, 8000);
+  }).catch(function (e) {
+    toast('bad', 'La descarga no está disponible ahora mismo.',
+          'El vídeo sigue guardado y protegido.', 9000);
+    pushFeed('error', job.id, 'download: ' + e.message);
+  });
+}
+
+/* ═════════════════════════ panel técnico ═════════════════════════ */
+
+function toggleTech(show) {
+  if (show === undefined) show = !S.techOpen;
+  S.techOpen = show;
+  $('tech').hidden = !show;
+  $('scrim').hidden = !show;
+  $('btn-tech').setAttribute('aria-expanded', show ? 'true' : 'false');
+  if (show) renderTech();
+}
+
+function renderTech() {
+  if (!S.techOpen) return;
+  var job = selJob();
+  $('tech-sub').textContent = job
+    ? 'job ' + job.id + ' · ' + job.status
+    : 'sin job seleccionado';
+  renderTechChips();
+  renderProv();
+  renderObjects();
+  renderAgentLoop();
+  renderTechScenes();
+  renderFeed();
+  renderChaos();
+}
+
+function renderTechChips() {
+  if (!S.techOpen) return;
+  var box = $('tech-chips');
+  clear(box);
+  var h = S.health || {};
+  var job = selJob();
+
+  function chip(html, cls) {
+    var c = el('span', 'tchip' + (cls ? ' ' + cls : ''));
+    c.innerHTML = html;
+    box.appendChild(c);
+  }
+
+  chip('GEN_MODE <b>' + (h.mode || '?') + (h.stub ? ' · stub' : '') + '</b>');
+  chip('B2 <b>' + (!h.b2 ? 'off' : (h.b2_capped ? 'capped' : 'ok')) + '</b>',
+       h.b2 && !h.b2_capped ? 'ok' : 'warn');
+  var tx = h.b2_transactions || {};
+  chip('B2 tx <b>' + (tx.total != null ? tx.total : '—') + '</b>');
+  chip('events <b>' + (h.events_mode || '?') + '</b>');
+  chip('player <b>' + Player.engine + '</b>');
+  if (job) chip('segmentos <b>' + (S.segs[job.id] || 0) + '</b>');
+  if (h.degraded) chip('DEGRADED', 'warn');
+}
+
+function renderProv() {
+  var body = $('g-prov');
   clear(body);
   var job = selJob();
-  $('btn-verify').disabled = !job || job.status !== 'approved';
+  if (!job) { body.appendChild(el('div', 'tnote', 'Selecciona un spot.')); return; }
 
-  if (!job) { body.appendChild(el('div', 'empty', 'Sin job seleccionado.')); return; }
-
-  function row(k, v) {
-    var r = el('div', 'prov-row');
-    r.appendChild(el('span', 'k', k));
-    r.appendChild(el('span', 'v', v));
+  function kv(k, v) {
+    var r = el('div', 'kv');
+    r.appendChild(el('span', null, k));
+    r.appendChild(el('span', null, v));
     body.appendChild(r);
   }
-
-  row('job_id', job.id);
-  row('created', job.created_at_iso || '—');
-  row('escenas', String(job.scene_count || (job.scenes || []).length));
-  row('manifest', job.manifest_url ? 'provenance/' + job.id + '/manifest.json' : '— (aún no)');
-  row('lock', job.lock ? job.lock.mode + ' hasta ' + job.lock.retain_until : '— (sin aprobar)');
+  kv('job_id', job.id);
+  kv('created_at', job.created_at_iso || '—');
+  kv('scene_count', String(job.scene_count || (job.scenes || []).length));
+  kv('first_frame_ms', job.first_frame_ms != null ? String(job.first_frame_ms) : '—');
+  kv('total_render_ms', job.total_render_ms != null ? String(job.total_render_ms) : '—');
+  kv('stream_url', job.stream_url || '—');
+  kv('manifest', job.manifest_url ? 'provenance/' + job.id + '/manifest.json' : '— (aún no)');
+  kv('object_lock', job.lock ? job.lock.mode + ' hasta ' + job.lock.retain_until : '— (sin aprobar)');
 
   // Linaje: cada rechazo encadena una toma nueva con parent_run_id.
-  var decisions = (S.detail && S.detail.job && S.detail.job.id === job.id) ? (S.detail.decisions || []) : [];
-  var rejects = decisions.filter(function (d) { return d.action === 'reject'; });
-  var lin = el('div', 'lineage');
-  lin.appendChild(el('div', 'iter-top', 'LINAJE · parent_run_id'));
-  var node = el('div', 'lin-node');
-  node.appendChild(el('span', 'rail', '●'));
-  node.appendChild(el('span', 'tag', 'run ' + job.id + ' · take 1'));
-  lin.appendChild(node);
+  var det = (S.detail && S.detail.job && S.detail.job.id === job.id) ? S.detail : null;
+  var rejects = ((det && det.decisions) || []).filter(function (d) { return d.action === 'reject'; });
+  body.appendChild(el('div', 'subhead', 'LINAJE · parent_run_id'));
+  var lin = el('div', 'lin');
+  lin.appendChild(el('div', null, '● run ' + job.id + ' · take 1'));
   rejects.forEach(function (d, i) {
-    var arrow = el('div', 'lin-node');
-    arrow.appendChild(el('span', 'rail', '│'));
-    arrow.appendChild(el('span', 'tag', 'reject' + (d.scene ? ' escena ' + d.scene : '') +
-                                        (d.note ? ' — "' + d.note + '"' : '')));
-    lin.appendChild(arrow);
-    var t = el('div', 'lin-node take2');
-    t.appendChild(el('span', 'rail', '└─'));
-    t.appendChild(el('span', 'tag', 'refine take ' + (i + 2) + ' · parent_run_id=' + job.id));
-    lin.appendChild(t);
+    var r = el('div');
+    r.appendChild(el('em', null, '│ reject' + (d.scene ? ' escena ' + d.scene : '') +
+                                 (d.note ? ' — "' + d.note + '"' : '')));
+    lin.appendChild(r);
+    lin.appendChild(el('div', null, '└─ refine take ' + (i + 2) + ' · parent_run_id=' + job.id));
   });
   body.appendChild(lin);
 
-  // Objetos que hay realmente en el bucket
-  var objs = (S.detail && S.detail.job && S.detail.job.id === job.id) ? (S.detail.objects || []) : [];
-  if (objs.length) {
-    var ob = el('div', 'lineage');
-    ob.appendChild(el('div', 'iter-top', 'OBJETOS EN B2 (' + objs.length + ')'));
-    objs.slice(0, 8).forEach(function (o) {
-      var n = el('div', 'lin-node');
-      n.appendChild(el('span', 'rail', '·'));
-      n.appendChild(el('span', 'tag', o.key + (o.size ? '  ' + Math.round(o.size / 1024) + ' KiB' : '')));
-      ob.appendChild(n);
-    });
-    body.appendChild(ob);
-  }
+  // Manifest + verify
+  var vbtn = el('button', 'minibtn', 'genblaze verify');
+  vbtn.type = 'button';
+  vbtn.disabled = job.status !== 'approved';
+  vbtn.addEventListener('click', function () { verify(job, vbtn); });
+  body.appendChild(vbtn);
 
-  // Manifest
-  var box = el('div', 'jsonbox', 'cargando manifest…');
-  body.appendChild(box);
+  var box = el('div', 'jsonbox', '');
   if (!job.manifest_url) {
     box.textContent = 'Sin manifest todavía — se escribe cuando termina el render.';
+    body.appendChild(box);
   } else if (job.status !== 'approved') {
-    // El manifest se sella al aprobar; pedirlo antes sólo genera 404 en consola.
-    box.textContent = 'El manifest se sella al aprobar el job.\nClave prevista: provenance/' +
+    box.textContent = 'El manifest se sella al aprobar.\nClave prevista: provenance/' +
                       job.id + '/manifest.json';
-    var btn = el('button', 'btn btn-mini', 'Cargar manifest igualmente');
-    btn.type = 'button';
-    btn.style.margin = '0 9px 8px';
-    btn.addEventListener('click', function () { fetchManifest(job, box); });
-    body.appendChild(btn);
+    var lbtn = el('button', 'minibtn', 'Cargar manifest igualmente');
+    lbtn.type = 'button';
+    lbtn.addEventListener('click', function () { fetchManifest(job, box); });
+    body.appendChild(lbtn);
+    body.appendChild(box);
   } else {
+    body.appendChild(box);
     fetchManifest(job, box);
   }
 }
@@ -642,18 +672,117 @@ function fetchManifest(job, box) {
     return r.text().then(function (t) { return { ok: r.ok, status: r.status, t: t }; });
   }).then(function (res) {
     if (S.sel !== forJob || !box.parentNode) return;
-    if (!res.ok) {
-      box.textContent = 'manifest no disponible (HTTP ' + res.status + ')\n' + res.t.slice(0, 200);
-      return;
-    }
+    if (!res.ok) { box.textContent = 'manifest no disponible (HTTP ' + res.status + ')'; return; }
     try { box.textContent = JSON.stringify(JSON.parse(res.t), null, 1); }
-    catch (e) { box.textContent = res.t.slice(0, 1200); }
+    catch (e) { box.textContent = res.t.slice(0, 1400); }
   }).catch(function (e) {
     if (box.parentNode) box.textContent = 'manifest no disponible: ' + e.message;
   });
 }
 
-/* ═════════════════════════════ render: feed ═══════════════════════════════ */
+function verify(job, btn) {
+  btn.disabled = true;
+  var prev = btn.textContent;
+  btn.textContent = 'verificando…';
+  var box = el('div', 'verify-out', 'ejecutando `genblaze verify` en el servidor…');
+  btn.parentNode.insertBefore(box, btn.nextSibling);
+
+  api('/api/verify/' + job.id).then(function (d) {
+    box.className = 'verify-out ' + (d.verified ? 'ok' : 'bad');
+    box.textContent = (d.verified ? '✔ MANIFEST VERIFICADO' : '✖ NO VERIFICADO') +
+                      '  (exit ' + d.exit_code + ')\n' + (d.output || '');
+  }).catch(function (e) {
+    box.className = 'verify-out bad';
+    box.textContent = 'verify falló: ' + e.message;
+  }).then(function () {
+    btn.disabled = false;
+    btn.textContent = prev;
+  });
+}
+
+function renderObjects() {
+  var body = $('g-objects');
+  clear(body);
+  var job = selJob();
+  var det = (S.detail && S.detail.job && job && S.detail.job.id === job.id) ? S.detail : null;
+  var objs = (det && det.objects) || [];
+  $('n-objects').textContent = objs.length;
+  if (!objs.length) {
+    body.appendChild(el('div', 'tnote', 'Sin objetos listados todavía.'));
+    return;
+  }
+  var lin = el('div', 'lin');
+  objs.forEach(function (o) {
+    lin.appendChild(el('div', null, o.key + (o.size ? '  ' + Math.round(o.size / 1024) + ' KiB' : '')));
+  });
+  body.appendChild(lin);
+}
+
+function agentEntries(id) { return S.iters[id] || (S.iters[id] = []); }
+
+function pushIter(id, entry) {
+  agentEntries(id).push(entry);
+  if (id === S.sel) renderAgentLoop();
+}
+
+function renderAgentLoop() {
+  if (!S.techOpen) return;
+  var body = $('g-agent');
+  clear(body);
+  var arr = S.sel ? agentEntries(S.sel) : [];
+  $('n-agent').textContent = arr.length;
+
+  if (!arr.length) {
+    body.appendChild(el('div', 'tnote',
+      'Sin iteraciones del juez todavía. Pide cambios sobre una toma para ver el AgentLoop: ' +
+      'el juez de visión puntúa, refina el prompt y relanza la escena.'));
+    return;
+  }
+
+  arr.slice().reverse().forEach(function (it) {
+    var n = el('div', 'iter');
+    var top = el('div', 'iter-top');
+    top.appendChild(el('span', null, fmtClock(it.at)));
+    top.appendChild(el('span', null, it.scene ? 'escena ' + it.scene : 'job'));
+    if (it.iteration != null) top.appendChild(el('span', null, 'iter ' + it.iteration));
+    if (it.score != null) top.appendChild(el('span', 'sc' + (it.score >= 0.6 ? '' : ' low'), it.score.toFixed(2)));
+    n.appendChild(top);
+    if (it.score != null) {
+      var bar = el('div', 'iter-bar');
+      var fill = el('i', it.score >= 0.6 ? 'high' : '');
+      fill.style.width = Math.max(2, Math.min(100, it.score * 100)) + '%';
+      bar.appendChild(fill);
+      n.appendChild(bar);
+    }
+    if (it.reason) n.appendChild(el('div', null, it.reason));
+    if (it.action) n.appendChild(el('div', 'act', it.action));
+    body.appendChild(n);
+  });
+}
+
+function renderTechScenes() {
+  var body = $('g-scenes');
+  clear(body);
+  var job = selJob();
+  var scenes = (job && job.scenes) || [];
+  var ready = scenes.filter(function (s) { return s.status === 'ready'; }).length;
+  $('n-scenes').textContent = job ? ready + '/' + (job.scene_count || scenes.length) : '';
+  if (!scenes.length) { body.appendChild(el('div', 'tnote', 'Sin escenas todavía.')); return; }
+  scenes.forEach(function (s) {
+    var r = el('div', 'scenerow ' + s.status);
+    r.appendChild(el('span', 'no', String(s.n)));
+    r.appendChild(el('span', 'ti', s.title || s.path || '—'));
+    r.appendChild(el('span', 'st', s.status + (s.ms != null ? ' · ' + Math.round(s.ms / 1000) + 's' : '')));
+    body.appendChild(r);
+  });
+}
+
+function fmtClock(ts) {
+  var d = new Date(ts);
+  return String(d.getHours()).padStart(2, '0') + ':' +
+         String(d.getMinutes()).padStart(2, '0') + ':' +
+         String(d.getSeconds()).padStart(2, '0');
+}
 
 function pushFeed(type, jobId, detail) {
   S.feed.push({ at: Date.now(), type: type, job: jobId, detail: detail });
@@ -662,11 +791,12 @@ function pushFeed(type, jobId, detail) {
 }
 
 function renderFeed() {
-  var body = $('feed-body');
+  if (!S.techOpen) return;
+  var body = $('g-feed');
   clear(body);
-  $('feed-count').textContent = S.feed.length;
-  if (!S.feed.length) { body.appendChild(el('div', 'empty', 'Esperando eventos de B2…')); return; }
-  S.feed.slice(-60).reverse().forEach(function (f) {
+  $('n-feed').textContent = S.feed.length;
+  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Esperando eventos de B2…')); return; }
+  S.feed.slice(-70).reverse().forEach(function (f) {
     var r = el('div', 'feedrow');
     r.appendChild(el('span', 't', fmtClock(f.at)));
     r.appendChild(el('span', 'k ' + f.type, f.type));
@@ -675,38 +805,53 @@ function renderFeed() {
   });
 }
 
-/* ═════════════════════════════ selección de job ═══════════════════════════ */
+function renderChaos() {
+  if (!S.techOpen) return;
+  var body = $('g-chaos');
+  clear(body);
+  body.appendChild(el('div', 'tnote',
+    'Mata un proveedor en directo: el siguiente MODEL_ERROR disparará fallback_models.'));
+  CHAOS_PROVIDERS.forEach(function (p) {
+    var dead = !!S.chaos[p];
+    var row = el('div', 'chaosrow');
+    row.appendChild(el('span', 'nm', p));
+    row.appendChild(el('span', 'state' + (dead ? ' dead' : ''), dead ? 'muerto' : 'vivo'));
+    var b = el('button', 'minibtn', dead ? 'Revivir' : 'Matar');
+    b.type = 'button';
+    b.style.marginTop = '0';
+    b.addEventListener('click', function () {
+      b.disabled = true;
+      api('/api/chaos', { method: 'POST', body: { provider: p, dead: !dead } })
+        .then(function (d) { S.chaos[d.provider] = !!d.dead; renderChaos(); })
+        .catch(function () { b.disabled = false; });
+    });
+    row.appendChild(b);
+    body.appendChild(row);
+  });
+}
 
-function select(id, opts) {
-  opts = opts || {};
-  var job = jobById(id);
-  if (!job) return;
-  var changed = S.sel !== id;
-  S.sel = id;
+/* ═════════════════════════ datos + SSE ═════════════════════════ */
 
-  $('stage-empty').hidden = true;
-  $('stage-title').hidden = false;
-  $('stage-jobid').textContent = job.id;
-  $('stage-jobname').textContent = job.title || job.brief || '';
-  $('seg-counter').textContent = segLabel(S.segs[id] || 0);
-
-  if (changed || opts.force) Player.load(job);
-
-  renderJobs(); renderTimers(); renderScenes(); renderReview();
-  renderAgentLoop(); renderProvenance();
-  loadDetail(id);
+function upsertJob(job) {
+  if (!job || !job.id) return;
+  var found = false;
+  for (var i = 0; i < S.jobs.length; i++) {
+    if (S.jobs[i].id === job.id) { S.jobs[i] = job; found = true; break; }
+  }
+  if (!found) S.jobs.unshift(job);
+  renderJobs();
+  if (job.id === S.sel) { renderStage(); renderTech(); }
 }
 
 function loadDetail(id) {
   api('/api/jobs/' + id).then(function (d) {
     if (S.sel !== id) return;
     S.detail = d;
-    // Sembramos el AgentLoop con lo que ya está en la base de datos.
     var arr = [];
     (d.provider_events || []).forEach(function (ev) {
       if (ev.kind === 'judge_score') {
         arr.push({ at: ev.at, scene: ev.scene, score: ev.score, reason: ev.detail || null,
-                   action: null, iteration: ev.iteration });
+                   iteration: ev.iteration });
       } else if (ev.kind === 'retry') {
         arr.push({ at: ev.at, scene: ev.scene, reason: ev.detail || 'reintento',
                    action: 'escena relanzada' });
@@ -717,33 +862,13 @@ function loadDetail(id) {
                    action: 'fallback_models → ' + (ev.fallback_model || 'modelo de respaldo') });
       }
     });
-    // Conservamos lo llegado por SSE que aún no esté en la BD.
     var live = (S.iters[id] || []).filter(function (x) { return x._live; });
     S.iters[id] = arr.concat(live);
-    renderAgentLoop(); renderProvenance();
+    renderTech();
   }).catch(function (e) {
     if (S.sel !== id) return;
     pushFeed('error', id, 'GET /api/jobs/' + id + ': ' + e.message);
   });
-}
-
-/* ═════════════════════════════ upsert + SSE ═══════════════════════════════ */
-
-function upsertJob(job) {
-  if (!job || !job.id) return;
-  var found = false;
-  for (var i = 0; i < S.jobs.length; i++) {
-    if (S.jobs[i].id === job.id) { S.jobs[i] = job; found = true; break; }
-  }
-  if (!found) S.jobs.unshift(job);
-  renderJobs();
-  if (job.id === S.sel) { renderTimers(); renderScenes(); renderReview(); }
-}
-
-function sseStatus(on, label) {
-  var n = $('sys-sse');
-  n.className = 'sys sys-stream ' + (on ? 'on' : 'off');
-  n.querySelector('.sys-sse-label').textContent = label;
 }
 
 var esRetry = 0;
@@ -751,21 +876,18 @@ var esRetry = 0;
 function connectSSE() {
   var es;
   try { es = new EventSource('/api/events'); }
-  catch (e) { sseStatus(false, 'sin stream'); return; }
+  catch (e) { return; }
 
   var TYPES = ['hello', 'job_update', 'render_started', 'segment_landed', 'scene_ready',
                'render_complete', 'provider_failover', 'judge_score', 'approved',
                'rejected', 'chaos', 'ping'];
 
-  es.onopen = function () { esRetry = 0; sseStatus(true, 'en vivo'); };
-
+  es.onopen = function () { esRetry = 0; };
   es.onerror = function () {
-    sseStatus(false, 'reconectando');
     try { es.close(); } catch (e) {}
     esRetry = Math.min(esRetry + 1, 6);
     setTimeout(connectSSE, 500 * esRetry);
   };
-
   TYPES.forEach(function (t) {
     es.addEventListener(t, function (msg) {
       var d = {};
@@ -785,8 +907,6 @@ function handleEvent(type, d) {
     case 'hello':
       S.jobs = d.jobs || [];
       renderJobs();
-      sseStatus(true, 'en vivo');
-      if (!S.sel && S.jobs.length) select(pickDefaultJob().id);
       return;
 
     case 'job_update':
@@ -794,9 +914,10 @@ function handleEvent(type, d) {
     case 'render_complete':
       if (d.job) upsertJob(d.job);
       if (type === 'scene_ready') {
-        pushFeed('scene_ready', jid, 'escena ' + d.scene + ' lista' + (d.ms ? ' · ' + fmtDur(d.ms) : ''));
+        pushFeed('scene_ready', jid, 'escena ' + d.scene + ' lista' + (d.ms ? ' · ' + d.ms + ' ms' : ''));
       } else if (type === 'render_complete') {
-        pushFeed('render_complete', jid, 'render total ' + fmtDur(d.total_render_ms));
+        pushFeed('render_complete', jid, 'total_render_ms ' + d.total_render_ms);
+        if (jid === S.sel) toast('', 'Tu spot está listo para revisar.', null, 7000);
       } else {
         pushFeed('job_update', jid, (d.job && d.job.status) || '');
       }
@@ -809,12 +930,13 @@ function handleEvent(type, d) {
 
     case 'segment_landed':
       S.segs[jid] = (S.segs[jid] || 0) + 1;
-      if (jid === S.sel) $('seg-counter').textContent = segLabel(S.segs[jid]);
+      if (jid === S.sel) renderTechChips();
       pushFeed('segment_landed', jid, 'b2:ObjectCreated · ' + (d.key || ('seq ' + d.seq)));
       return;
 
     case 'provider_failover':
-      failoverToast(d);
+      // Ana no necesita saber qué modelo era: sólo que no ha perdido el trabajo.
+      toast('warn', 'Un proveedor falló; seguimos con otro sin perder el trabajo.', null, 9000);
       pushFeed('provider_failover', jid,
                (d.model || '?') + ' → ' + (d.fallback_model || '?') + (d.scene ? ' · escena ' + d.scene : ''));
       if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene,
@@ -833,199 +955,72 @@ function handleEvent(type, d) {
     case 'approved':
       if (d.job) upsertJob(d.job);
       pushFeed('approved', jid, 'Object Lock GOVERNANCE · ' + (d.key || ''));
-      toast('good', 'Aprobado · Object Lock GOVERNANCE',
-            (d.key || ('approved/' + jid + '/final.mp4')) +
-            (d.lock ? '  retención hasta ' + d.lock.retain_until : ''), 10000);
-      if (jid === S.sel) { renderReview(); renderProvenance(); }
+      if (jid === S.sel) {
+        var days = d.lock ? daysLeft(d.lock.retain_until) : 30;
+        toast('good', 'Aprobado y protegido.',
+              'Nadie puede borrarlo ni modificarlo durante ' + days + ' días.', 9000);
+      }
       return;
 
     case 'rejected':
       if (d.job) upsertJob(d.job);
       pushFeed('rejected', jid, 'nota: ' + (d.note || '') + (d.scene ? ' · escena ' + d.scene : ''));
-      if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene,
-                               reason: 'Rechazo de la productora: "' + (d.note || '') + '"',
-                               action: 'toma a rejected/ · AgentLoop relanza la escena' });
-      // La playlist ya tenía ENDLIST: hay que reenganchar para ver el refinado.
       if (jid === S.sel) {
         var j = jobById(jid);
         if (j) Player.load(j, { reattach: true });
-        renderReview();
+        renderStage();
       }
       return;
 
     case 'chaos':
       S.chaos[d.provider] = !!d.dead;
       pushFeed('chaos', jid, d.provider + (d.dead ? ' MUERTO' : ' revivido'));
-      toast(d.dead ? 'bad' : 'good', 'Chaos injection',
-            d.provider + (d.dead ? ' está muerto — el siguiente MODEL_ERROR disparará fallback_models'
-                                 : ' revivido'), 7000);
+      toast(d.dead ? 'warn' : 'good',
+            d.dead ? 'Proveedor desconectado a propósito.' : 'Proveedor de vuelta.',
+            d.dead ? 'El siguiente intento cambiará solo a otro proveedor.' : null, 7000);
       renderChaos();
       return;
   }
 }
 
-// Job por defecto al abrir: el que más luce (uno vivo; si no, uno en revisión).
 function pickDefaultJob() {
   var live = S.jobs.filter(isLive);
   if (live.length) return live[0];
   var rev = S.jobs.filter(function (j) { return j.status === 'in_review'; });
   if (rev.length) return rev[0];
-  var app = S.jobs.filter(function (j) { return j.status === 'approved'; });
-  if (app.length) return app[0];
   return S.jobs[0];
 }
 
-/* ═════════════════════════════ acciones ═══════════════════════════════════ */
-
-function newSpot(ev) {
-  ev.preventDefault();
-  var brief = $('brief-input').value.trim();
-  if (!brief) {
-    brief = 'spot de 15s para una zapatilla de running, luz de amanecer, ciudad vacía';
-    $('brief-input').value = brief;
-  }
-  var btn = $('btn-newspot');
-  btn.disabled = true; btn.textContent = 'Lanzando…';
-
-  api('/api/jobs', { method: 'POST', body: {
-    brief: brief,
-    title: brief.slice(0, 60),
-    scenes: parseInt($('scene-count').value, 10) || 4
-  }}).then(function (d) {
-    var job = d.job || { id: d.id };
-    upsertJob(job);
-    S.sel = null;                       // fuerza la carga del player
-    select(job.id, { force: true });
-    pushFeed('job_update', job.id, 'job creado · pipeline arrancado');
-    toast('good', 'Job creado', job.id + ' — enganchando al stream incremental…', 6000);
-  }).catch(function (e) {
-    toast('bad', 'No se pudo crear el job', e.message, 10000);
-    pushFeed('error', null, 'POST /api/jobs: ' + e.message);
-  }).then(function () {
-    btn.disabled = false; btn.textContent = 'New spot';
-  });
-}
-
-function decide(action) {
-  var job = selJob();
-  if (!job) return;
-  var note = $('note-input').value.trim();
-  var sceneSel = $('reject-scene').value;
-  var body = { action: action, note: note };
-  if (action === 'reject' && sceneSel) body.scene = parseInt(sceneSel, 10);
-
-  $('btn-approve').disabled = $('btn-reject').disabled = true;
-
-  api('/api/jobs/' + job.id + '/decision', { method: 'POST', body: body })
-    .then(function (d) {
-      if (d.job) upsertJob(d.job);
-      $('note-input').value = '';
-      if (action === 'approve') { renderReview(); renderProvenance(); }
-      else {
-        pushIter(job.id, { _live: true, at: Date.now(),
-                           scene: body.scene || null,
-                           reason: 'Rechazo de la productora: "' + (note || 'sin nota') + '"',
-                           action: 'AgentLoop: juez de visión → prompt refinado → escena relanzada' });
-        var j = jobById(job.id);
-        if (j) Player.load(j, { reattach: true });
-      }
-    })
-    .catch(function (e) {
-      toast('bad', 'Decisión rechazada por el backend',
-            e.message + (e.data && e.data.status ? ' (status: ' + e.data.status + ')' : ''), 9000);
-      renderReview();
-    })
-    .then(function () { renderReview(); });
-}
-
-function verify() {
-  var job = selJob();
-  if (!job) return;
-  var btn = $('btn-verify');
-  btn.disabled = true; btn.textContent = 'Verificando…';
-
-  var box = el('div', 'verify-out', 'ejecutando `genblaze verify` en el servidor…');
-  $('provenance-body').insertBefore(box, $('provenance-body').firstChild);
-
-  api('/api/verify/' + job.id).then(function (d) {
-    box.className = 'verify-out ' + (d.verified ? 'ok' : 'bad');
-    box.textContent = (d.verified ? '✔ MANIFEST VERIFICADO' : '✖ NO VERIFICADO') +
-                      '  (exit ' + d.exit_code + ')\n' + (d.output || '');
-    toast(d.verified ? 'good' : 'bad', 'genblaze verify',
-          d.verified ? 'Manifest embebido verificado en ' + job.id : 'La verificación falló', 8000);
-  }).catch(function (e) {
-    box.className = 'verify-out bad';
-    box.textContent = 'verify falló: ' + e.message;
-  }).then(function () {
-    btn.disabled = false; btn.textContent = 'Verify';
-  });
-}
-
-/* ═════════════════════════════ chaos ══════════════════════════════════════ */
-
-function renderChaos() {
-  var body = $('chaos-list');
-  clear(body);
-  CHAOS_PROVIDERS.forEach(function (p) {
-    var dead = !!S.chaos[p];
-    var row = el('div', 'chaos-item');
-    row.appendChild(el('span', 'nm', p));
-    row.appendChild(el('span', 'state ' + (dead ? 'dead' : 'alive'), dead ? 'muerto' : 'vivo'));
-    var b = el('button', 'btn btn-mini', dead ? 'Revivir' : 'Matar');
-    b.type = 'button';
-    b.addEventListener('click', function () {
-      b.disabled = true;
-      api('/api/chaos', { method: 'POST', body: { provider: p, dead: !dead } })
-        .then(function (d) { S.chaos[d.provider] = !!d.dead; renderChaos(); })
-        .catch(function (e) { toast('bad', 'Chaos falló', e.message, 7000); b.disabled = false; });
-    });
-    row.appendChild(b);
-    body.appendChild(row);
-  });
-}
-
-function toggleChaos(show) {
-  var m = $('chaos-modal');
-  if (show === undefined) show = m.hidden;
-  m.hidden = !show;
-  if (show) renderChaos();
-}
-
-/* ═════════════════════════════ arranque ═══════════════════════════════════ */
+/* ═════════════════════════ arranque ═════════════════════════ */
 
 function loadHealth() {
   api('/api/health').then(function (h) {
     S.health = h;
-    $('sys-mode').innerHTML = 'mode <b>' + (h.mode || '—') + (h.stub ? ' · stub' : '') + '</b>';
-    var b2 = !h.b2 ? 'off' : (h.b2_capped ? 'capped' : 'ok');
-    $('sys-b2').innerHTML = 'B2 <b>' + b2 + '</b>';
-    $('sys-b2').style.color = (b2 === 'ok') ? '' : 'var(--warn)';
-    // Estado degradado explícito: si el backend está tocado, se ve por qué.
-    if (h.degraded && h.warning && !loadHealth._warned) {
+    renderTechChips();
+    if (h.degraded && !loadHealth._warned) {
       loadHealth._warned = true;
-      toast('failover', 'Backend degradado', h.warning, 14000);
-      pushFeed('error', null, 'health: ' + h.warning);
+      // Traducido: nada de cuotas ni transacciones.
+      toast('warn', 'Estamos con capacidad reducida.',
+            'Puedes seguir creando, viendo y aprobando con normalidad.', 12000);
+      pushFeed('error', null, 'health: ' + (h.warning || 'degraded'));
     }
   }).catch(function (e) {
-    $('sys-mode').innerHTML = 'mode <b>?</b>';
-    $('sys-b2').innerHTML = 'B2 <b>?</b>';
-    toast('bad', 'Backend no responde', 'GET /api/health: ' + e.message +
-          '. La UI seguirá reintentando el stream de eventos.', 12000);
+    toast('bad', 'No conseguimos hablar con el servidor.',
+          'Seguimos reintentando; no pierdes nada de lo que ya hay.', 12000);
+    pushFeed('error', null, 'GET /api/health: ' + e.message);
   });
 }
 
 function bootstrapJobs() {
-  // El `hello` del SSE ya trae los jobs, pero pedimos la lista igual para que
-  // la sala nunca aparezca vacía si el EventSource tarda o falla.
   api('/api/jobs').then(function (d) {
-    if (S.jobs.length) return;
     S.jobs = d.jobs || [];
     renderJobs();
-    if (!S.sel && S.jobs.length) select(pickDefaultJob().id);
-  }).catch(function (e) {
-    var list = $('joblist');
-    clear(list);
-    list.appendChild(el('div', 'empty', 'No se pudo cargar /api/jobs: ' + e.message));
+    // Si ya hay trabajo hecho, se enseña; si no, la pantalla pide un brief.
+    if (S.jobs.length) select(pickDefaultJob().id);
+    else showCompose();
+  }).catch(function () {
+    renderJobs();
+    showCompose();
   });
 }
 
@@ -1033,52 +1028,76 @@ function bindKeys() {
   document.addEventListener('keydown', function (e) {
     var t = e.target || {};
     var typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT';
-    if (e.key === 'Escape') { toggleChaos(false); return; }
+
+    if (e.key === 'Escape') {
+      if (S.techOpen) { toggleTech(false); return; }
+      if (!$('changes').hidden) { $('changes').hidden = true; return; }
+      return;
+    }
+
+    // Enviar el brief con ⌘/Ctrl+Enter desde el propio textarea.
+    if (typing && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      if (t.id === 'brief') { e.preventDefault(); createSpot(); }
+      if (t.id === 'note') { e.preventDefault(); sendChanges(); }
+      return;
+    }
     if (typing) return;
-    if (e.key === 'k' || e.key === 'K') { e.preventDefault(); toggleChaos(); }
-    if (e.key === ' ') {
+
+    // El chaos sigue existiendo: ahora vive en la vista técnica.
+    if (e.key === 'k' || e.key === 'K') {
+      e.preventDefault();
+      toggleTech(true);
+      $('grp-chaos').open = true;
+      $('grp-chaos').scrollIntoView({ block: 'nearest' });
+    }
+    if (e.key === ' ' && S.view === 'spot') {
       e.preventDefault();
       var v = Player.video;
       if (v.paused) v.play().catch(function () {}); else v.pause();
     }
-    if (e.key === '?') {
-      toast('', 'Atajos', 'k · chaos injection   ␣ · play/pausa   Esc · cerrar', 6000);
-    }
   });
+}
+
+function sendChanges() {
+  var note = $('note').value.trim();
+  decide('reject', note, $('note-scene').value);
 }
 
 function start() {
   Player.init();
-  $('newspot-form').addEventListener('submit', newSpot);
-  $('btn-approve').addEventListener('click', function () { decide('approve'); });
-  $('btn-reject').addEventListener('click', function () { decide('reject'); });
-  $('btn-verify').addEventListener('click', verify);
-  $('btn-filter').addEventListener('click', function () {
-    S.hideFailed = !S.hideFailed;
-    this.textContent = S.hideFailed ? 'sin fallidos' : 'todos';
-    renderJobs();
+
+  $('btn-create').addEventListener('click', createSpot);
+  $('btn-new').addEventListener('click', showCompose);
+  $('btn-tech').addEventListener('click', function () { toggleTech(); });
+  $('btn-tech-close').addEventListener('click', function () { toggleTech(false); });
+  $('scrim').addEventListener('click', function () { toggleTech(false); });
+  $('btn-changes-cancel').addEventListener('click', function () { $('changes').hidden = true; });
+  $('btn-changes-send').addEventListener('click', sendChanges);
+
+  $('len-picker').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-scenes]');
+    if (!b) return;
+    S.scenes = parseInt(b.getAttribute('data-scenes'), 10) || 4;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (x) {
+      x.classList.toggle('on', x === b);
+    });
   });
-  $('chaos-close').addEventListener('click', function () { toggleChaos(false); });
-  $('chaos-modal').addEventListener('click', function (e) {
-    if (e.target === $('chaos-modal')) toggleChaos(false);
-  });
+
   bindKeys();
-
-  renderJobs(); renderTimers(); renderScenes(); renderReview();
-  renderAgentLoop(); renderProvenance(); renderFeed();
-
+  renderJobs();
   loadHealth();
   bootstrapJobs();
   connectSSE();
 
-  // El cronómetro de "render total" corre en vivo mientras el job renderiza.
-  S.nowTimer = setInterval(function () {
+  // La frase del escenario cambia mientras el job está vivo.
+  S.tick = setInterval(function () {
     var j = selJob();
-    if (j && isLive(j)) renderTimers();
-  }, 200);
+    if (j && isLive(j) && S.view === 'spot') renderStage();
+  }, 1000);
 
   window.addEventListener('error', function (e) {
-    pushFeed('error', null, (e.message || 'error JS') + ' @ ' + (e.filename || '').split('/').pop() + ':' + e.lineno);
+    pushFeed('error', null, (e.message || 'error JS') + ' @ ' +
+             (e.filename || '').split('/').pop() + ':' + e.lineno);
   });
 }
 
