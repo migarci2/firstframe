@@ -434,9 +434,10 @@ Stated here because a judge with repo access should read it from us.
 - **Video:** _pending_
 
 > The review room sits behind a short access code so the demo behaves like the real
-> product. Judges: open https://firstframe.migarci2.dev, enter `FIRSTFRAME`, and you
+> product. Judges: open https://firstframe.migarci2.dev, click through to the app (or go straight to
+> https://firstframe.migarci2.dev/app), enter `FIRSTFRAME`, and you
 > land on the projects view with a project already in progress. The marketing page at
-> https://firstframe.migarci2.dev/landing.html is public and needs no code.
+> https://firstframe.migarci2.dev is public and needs no code.
 
 ## Submission checklist
 

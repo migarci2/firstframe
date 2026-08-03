@@ -32,8 +32,8 @@ curl -s https://firstframe.migarci2.dev/api/health   # ok:true, mode:free, b2:tr
 
 Y en el navegador, **en una ventana de incógnito** (para pasar por el muro como un juez):
 
-1. Abre `https://firstframe.migarci2.dev` → sale la pantalla de acceso.
-2. Código **`FIRSTFRAME`** → aterrizas en la **vista de proyectos**, con
+1. Abre `https://firstframe.migarci2.dev` → **la landing**. El boton de la sala lleva a `/app`.
+2. En `/app` sale el codigo. Mete **`FIRSTFRAME`** → aterrizas en `/app/projects`, con
    `Aeron SS26` y `Nova Q3` y un spot ya aprobado.
 3. Abre un proyecto → el editor con los cuatro paneles y el vídeo reproduciendo.
 

@@ -12,8 +12,8 @@ Backblaze Generative Media Hackathon · Genblaze 0.4.5 + Backblaze B2.
 
 | | |
 |---|---|
-| **Review room** | **https://firstframe.migarci2.dev** — access code **`FIRSTFRAME`** |
-| **Marketing page** | https://firstframe.migarci2.dev/landing.html — public, no code |
+| **Review room** | **https://firstframe.migarci2.dev/app** — access code **`FIRSTFRAME`** |
+| **Marketing page** | https://firstframe.migarci2.dev — public, no code |
 
 The room sits behind a short access code so the demo behaves like the real product.
 After the code you land on the projects view, with a project already in progress and a
@@ -31,12 +31,13 @@ so playback starts on scene 1 instead of on scene N.
 
 | | measured |
 |---|---|
-| **First frame on screen** | **5.4 s** |
-| **Full render** | **22.8 s** |
-| **Gap** | **4.2×** |
+| **First frame on screen** | **9.3 s** |
+| **Full render** | **65.7 s** |
+| **Gap** | **7.1×** |
 
-Job `j_23a692`, 3 scenes, recorded by the app itself in `data/firstframe.db`
-(`first_frame_ms=5375`, `total_render_ms=22795`). Across the six runs of the real
+Job `j_47cdc2`, 6 scenes, recorded by the app itself and **still live on the deployed
+instance** — open the review room and check it (`first_frame_ms=9303`,
+`total_render_ms=65652`). Across the six runs of the real
 pipeline still in that database, the first frame lands between **5.4 s and 10.9 s**
 against **22.8 s to 36.5 s** of full render — a 2.5× to 4.5× gap. Those runs used
 `DEMO_MODE=mock` with the vision judge off (`JUDGE_THRESHOLD=0`); see

@@ -11,15 +11,15 @@ export const campaign = {
   url: 'firstframe.migarci2.dev',
 
   proof: {
-    firstFrameSeconds: 7.8,
-    fullRenderSeconds: 30.3,
+    firstFrameSeconds: 9.3,
+    fullRenderSeconds: 65.7,
     get ratio() {
-      return this.fullRenderSeconds / this.firstFrameSeconds; // 3.9x
+      return this.fullRenderSeconds / this.firstFrameSeconds; // 7.1x
     },
   },
 
   copy: {
-    hook: 'Why wait 30 seconds',
+    hook: 'Why wait a minute',
     hookLine2: 'to reject a bad take?',
     problem: 'A generative render finishes long after you knew it was wrong.',
     reveal: 'See frame one while the rest is still rendering.',

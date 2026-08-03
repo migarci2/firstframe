@@ -5,7 +5,7 @@
  *
  *   · la barra superior se marca al hacer scroll,
  *   · los bloques del hero aparecen al entrar en pantalla,
- *   · la carrera: el reloj avanza de 0 a 30,3 s y las dos barras corren,
+ *   · la carrera: el reloj avanza de 0 a 65,7 s y las dos barras corren,
  *   · el recorrido: cuatro pasos con la captura pegada, que cambia sola,
  *   · la entrada y el cierre se componen conforme llegan.
  *
@@ -40,12 +40,12 @@
 
   // ── la carrera ────────────────────────────────────────────────────
   // Las dos cifras medidas por la propia app: primer fotograma y render entero.
-  // Son de un job REAL que sigue vivo en la instancia desplegada (j_7a80df,
+  // Son de un job REAL que sigue vivo en la instancia desplegada (j_47cdc2,
   // 6 escenas), no de una ejecucion historica: un juez puede abrir la sala y
   // comprobarlas. Si vuelves a sembrar la demo, actualiza estos dos numeros
   // con los de un job que exista, o la landing prometera algo no verificable.
-  var FIRST = 7.8;
-  var FULL  = 30.3;
+  var FIRST = 9.3;
+  var FULL  = 65.7;
 
   var race    = $('race');
   var sticky  = race && race.querySelector('.race-sticky');
