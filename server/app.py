@@ -68,6 +68,65 @@ def _err(status: int, msg: str, **extra):
     return JSONResponse({"error": msg, **extra}, status_code=status)
 
 
+# ---------------------------------------------------------------- muro de acceso
+# La instancia es publica y el jurado entra por la URL, asi que hay un codigo
+# compartido (server/auth.py). Lo que NO puede quedar detras del muro:
+#   * la portada y sus assets — es material de marketing, tiene que indexar y abrir,
+#   * /api/health — es la sonda del contenedor y del script de arranque,
+#   * /webhooks/b2 — lo llama Backblaze, que obviamente no trae cookie (va firmado),
+#   * la propia pantalla de acceso y el endpoint que la valida.
+_PUBLIC_EXACT = {
+    "/gate.html", "/landing.html", "/landing.css", "/landing.js",
+    "/api/health", "/api/access", "/favicon.ico", "/robots.txt",
+}
+_PUBLIC_PREFIX = ("/assets/", "/vendor/", "/webhooks/")
+
+
+def _is_public(path: str) -> bool:
+    return path in _PUBLIC_EXACT or path.startswith(_PUBLIC_PREFIX)
+
+
+@app.middleware("http")
+async def _access_gate(request: Request, call_next):
+    from server import auth
+
+    path = request.url.path
+    if (not auth.enabled() or _is_public(path)
+            or auth.check_cookie(request.cookies.get(auth.COOKIE))):
+        return await call_next(request)
+    # Una peticion de datos recibe un error de datos; una de navegacion, la pantalla.
+    if path.startswith(("/api/", "/stream/")):
+        return _err(401, "This workspace needs an access code.", gate="/gate.html")
+    return RedirectResponse("/gate.html", status_code=302)
+
+
+def _https(req: Request) -> bool:
+    """Detras del proxy de Fly la app ve http; la verdad viene en la cabecera."""
+    return (req.headers.get("x-forwarded-proto") or req.url.scheme) == "https"
+
+
+@app.post("/api/access")
+async def access(req: Request):
+    from server import auth
+
+    body = await _json(req)
+    if not auth.check_code(body.get("code")):
+        return _err(401, "That code is not valid.")
+    res = JSONResponse({"ok": True})
+    res.set_cookie(auth.COOKIE, auth.token(), max_age=auth.MAX_AGE, path="/",
+                   httponly=True, secure=_https(req), samesite="lax")
+    return res
+
+
+@app.post("/api/access/exit")
+def access_exit():
+    from server import auth
+
+    res = JSONResponse({"ok": True})
+    res.delete_cookie(auth.COOKIE, path="/")
+    return res
+
+
 # ---------------------------------------------------------------- projects
 # Un proyecto agrupa spots. Se persiste en su propia tabla para que uno recien
 # creado y todavia vacio siga existiendo al recargar.

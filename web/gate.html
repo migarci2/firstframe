@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
+<meta name="robots" content="noindex">
+<title>FirstFrame — Access</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<!-- Página autocontenida a propósito: es lo único que se sirve sin sesión, así que
+     no puede depender de styles.css ni de app.js, que sí van detrás del muro. -->
+<style>
+@font-face{font-family:'Inter';font-style:normal;font-weight:300 700;font-display:swap;
+  src:url('/vendor/fonts/inter-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,
+    U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+
+:root{
+  --canvas:#08090a; --card:#0c0d0f; --recessed:#111214;
+  --white:#f4f4f5; --ash:#9ba1a8; --smoke:#6b7178; --iron:#454647;
+  --border:rgba(255,255,255,.09); --coral:#ff6b5e; --coral-in:#1a0705; --bad:#ff7a6b;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--canvas); color:var(--white);
+  font:400 15px/1.5 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased; letter-spacing:-.011em;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:24px;
+}
+/* Un halo coral muy tenue: la misma firma de la portada, sin animación. */
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background:radial-gradient(680px 380px at 50% 8%,rgba(255,107,94,.055),transparent 70%);
+}
+.wrap{width:100%; max-width:392px; position:relative}
+.mark{display:flex; align-items:center; gap:9px; margin-bottom:34px}
+.mark span{font-size:15px; font-weight:600; letter-spacing:-.02em}
+
+h1{margin:0 0 8px; font-size:25px; font-weight:600; letter-spacing:-.028em}
+.sub{margin:0 0 26px; color:var(--ash); font-size:14.5px; line-height:1.55}
+
+label{
+  display:block; font-size:10.5px; font-weight:600; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--smoke); margin-bottom:8px;
+}
+input{
+  width:100%; background:var(--recessed); color:var(--white);
+  border:1px solid var(--border); border-radius:9px; padding:12px 14px;
+  font:500 15px/1.4 'Inter',sans-serif; letter-spacing:.08em;
+  outline:none; transition:border-color .12s,box-shadow .12s;
+}
+input::placeholder{color:var(--iron); letter-spacing:.04em; font-weight:400}
+input:focus{border-color:rgba(255,255,255,.22); box-shadow:0 0 0 3px rgba(255,255,255,.05)}
+body.err input{border-color:rgba(255,122,107,.55)}
+
+button{
+  width:100%; margin-top:12px; padding:12px 16px; border:0; border-radius:9px;
+  background:var(--coral); color:var(--coral-in); cursor:pointer;
+  font:600 14.5px/1 'Inter',sans-serif; letter-spacing:-.008em;
+  transition:background .12s;
+}
+button:hover{background:#ff8272}
+button:disabled{opacity:.6; cursor:default}
+
+.hint{margin:14px 0 0; font-size:12.5px; color:var(--smoke); line-height:1.5}
+.msg{margin:14px 0 0; font-size:13px; color:var(--bad); min-height:1px}
+.foot{margin-top:30px; padding-top:20px; border-top:1px solid rgba(255,255,255,.055)}
+.foot a{color:var(--ash); font-size:13px; text-decoration:none}
+.foot a:hover{color:var(--white)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="mark">
+    <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+      <g fill="#FF6B5E">
+        <rect x="2" y="4" width="7" height="16" rx="1.4"/>
+        <rect x="11.4" y="4" width="3.6" height="16" rx="1" opacity=".62"/>
+        <rect x="16.9" y="4" width="2.2" height="16" rx=".8" opacity=".36"/>
+        <rect x="20.9" y="4" width="1.2" height="16" rx=".6" opacity=".2"/>
+      </g>
+    </svg>
+    <span>FirstFrame</span>
+  </div>
+
+  <h1>Sign in to your workspace</h1>
+  <p class="sub">FirstFrame turns a brief into a watchable spot in seconds. Enter your
+    access code to open the review room.</p>
+
+  <form id="f" autocomplete="off">
+    <label for="code">Access code</label>
+    <input id="code" name="code" type="text" placeholder="••••••••" spellcheck="false"
+           autocapitalize="characters" autocomplete="off" maxlength="64" required>
+    <button id="go" type="submit">Continue</button>
+    <p class="hint" id="hint">Access code provided with the Devpost submission.</p>
+    <p class="msg" id="msg" role="alert"></p>
+  </form>
+
+  <div class="foot"><a href="/landing.html">What is FirstFrame? →</a></div>
+</main>
+
+<script>
+(function () {
+  var f = document.getElementById('f');
+  var input = document.getElementById('code');
+  var btn = document.getElementById('go');
+  var msg = document.getElementById('msg');
+  input.focus();
+
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var code = input.value.trim();
+    if (!code) return;
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    msg.textContent = '';
+    document.body.classList.remove('err');
+
+    fetch('/api/access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code })
+    }).then(function (r) {
+      if (r.ok) { window.location.replace('/'); return; }
+      document.body.classList.add('err');
+      msg.textContent = r.status === 401
+        ? 'That code is not valid. Check the submission text and try again.'
+        : 'Something went wrong. Try again in a moment.';
+      input.select();
+    }).catch(function () {
+      document.body.classList.add('err');
+      msg.textContent = 'Cannot reach the server. Try again in a moment.';
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = 'Continue';
+    });
+  });
+})();
+</script>
+</body>
+</html>
