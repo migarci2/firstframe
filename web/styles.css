@@ -41,12 +41,16 @@
   --recessed: #111214;
   --badge:    #1b1c1e;
 
-  --white:    #ffffff;
-  --ash:      #9c9c9d;
-  --smoke:    #6a6b6c;
+  /* Exactamente la escala de tinta de la landing: --ink / --ink-2 / --ink-3.
+   * El blanco puro y el borde sólido de antes hacían que la sala pareciera un
+   * panel de herramienta al lado de la portada. */
+  --white:    #f4f4f5;
+  --ash:      #9ba1a8;
+  --smoke:    #6b7178;
   --mist:     #e6e6e6;
   --iron:     #454647;
-  --border:   #303133;
+  --border:   rgba(255,255,255,.09);
+  --border-2: rgba(255,255,255,.055);
 
   /* Coral es la marca Y la acción principal, igual que en la landing: el mismo
    * botón que abre la sala es el que aprueba el spot. Antes también hacía de
@@ -88,39 +92,40 @@ button { cursor: pointer; }
 
 /* ───────────────────────── cabecera ───────────────────────── */
 
+/* La misma barra que el nav de la landing: 60 px, lockup a 21/15 y enlaces de
+ * 14 px en --ash. Nada de metadatos de ejecución en la primera línea. */
 .top {
-  height: 56px;
-  display: flex; align-items: center; justify-content: space-between; gap: 20px;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--border);
+  height: 60px;
+  display: flex; align-items: center; gap: 28px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--border-2);
 }
-/* El mismo lockup que la landing: la marca del primer fotograma y el resto
- * del render todavía llegando. */
 .wordmark {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 600; letter-spacing: -.015em; color: var(--white);
+  display: flex; align-items: center; gap: 9px;
+  font-size: 15px; font-weight: 600; letter-spacing: -.015em; color: var(--white);
 }
 .wordmark svg { display: block; flex: none; }
 
 .linkbtn {
   background: none; border: 0;
   color: var(--ash);
-  font-size: 13px; font-weight: 500; letter-spacing: .008em;
+  font-size: 14px; font-weight: 450; letter-spacing: -.005em;
   padding: 8px 0;
-  transition: color .15s;
+  transition: color .18s ease;
 }
 .linkbtn:hover { color: var(--white); }
+.linkbtn[aria-expanded="true"] { color: var(--white); }
 
 /* ───────────────────────── estructura ───────────────────────── */
 
-.shell { display: flex; height: calc(100vh - 56px); }
+.shell { display: flex; height: calc(100vh - 60px); }
 
 /* ───────────────────────── lateral ───────────────────────── */
 
 .side {
-  width: 220px; flex: 0 0 220px;
-  border-right: 1px solid var(--border);
-  padding: 16px 0 0;
+  width: 212px; flex: 0 0 212px;
+  border-right: 1px solid var(--border-2);
+  padding: 32px 0 0;
   display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -128,21 +133,23 @@ button { cursor: pointer; }
 .newbtn {
   display: block; width: calc(100% - 32px); margin: 0 16px;
   text-align: left;
-  background: rgba(255,255,255,.05);
-  border: 0; border-radius: 8px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--white);
   padding: 8px 12px;
-  font-size: 13px; font-weight: 500;
-  transition: background .15s;
+  font-size: 13.5px; font-weight: 500;
+  transition: background .18s ease, border-color .18s ease;
 }
 .newbtn::before { content: "+"; margin-right: 8px; color: var(--smoke); }
-.newbtn:hover { background: rgba(255,255,255,.09); }
+.newbtn:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16); }
 
+/* El mismo kicker de la landing: mono, versalitas, tracking .12em. */
 .side-label {
-  margin: 24px 16px 8px;
+  margin: 28px 16px 10px;
   font-family: var(--mono);
-  font-size: 10px; font-weight: 400;
-  text-transform: uppercase; letter-spacing: .05em;
+  font-size: 11px; font-weight: 400;
+  text-transform: uppercase; letter-spacing: .12em;
   color: var(--smoke);
 }
 
@@ -153,7 +160,7 @@ button { cursor: pointer; }
 .jobrow {
   display: block; width: 100%; text-align: left;
   background: none; border: 0;
-  padding: 10px 16px;
+  padding: 11px 16px;
   transition: background .12s;
 }
 .jobrow:hover { background: rgba(255,255,255,.03); }
@@ -169,8 +176,8 @@ button { cursor: pointer; }
 .jobrow span {
   display: block; margin-top: 4px;
   font-family: var(--mono);
-  font-size: 10px; font-weight: 400;
-  text-transform: uppercase; letter-spacing: .05em;
+  font-size: 10.5px; font-weight: 400;
+  text-transform: uppercase; letter-spacing: .1em;
   color: var(--smoke);
 }
 .jobrow span i { display: none; }
@@ -186,42 +193,49 @@ button { cursor: pointer; }
 .main {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column;
-  padding: 24px 32px 32px;
+  padding: 32px clamp(28px, 3.4vw, 48px) 36px;
   overflow: hidden;
 }
 
 /* — paso 1: el brief — */
 
-.compose { margin: auto; width: 100%; max-width: 560px; padding-bottom: 40px; }
+.compose { margin: auto; width: 100%; max-width: 600px; padding-bottom: 40px; }
 
-/* 56px a peso 400 con tracking POSITIVO: la firma del sistema. */
+/* La misma escala que los h2 de la landing: peso 620 y tracking NEGATIVO.
+ * El tracking positivo de antes venía de otro sistema y la delataba. */
 .compose h1 {
   margin: 0;
-  font-size: 40px; font-weight: 400; line-height: 1.17; letter-spacing: .0040em;
+  font-size: clamp(34px, 3.6vw, 46px);
+  font-weight: 620; line-height: 1.08; letter-spacing: -.032em;
   color: var(--white);
 }
-.compose-sub { margin: 16px 0 24px; color: var(--ash); font-size: 16px; max-width: 480px; }
+.compose-sub {
+  margin: 20px 0 28px;
+  color: var(--ash); font-size: 17px; line-height: 1.6; max-width: 52ch;
+  text-wrap: pretty;
+}
 
 #brief {
   width: 100%;
-  background: rgba(255,255,255,.05);
-  border: 0; border-radius: 8px;
-  padding: 12px;
-  font-size: 16px; line-height: 1.5;
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 16px; line-height: 1.55;
   color: var(--white);
   resize: none; outline: none;
+  transition: border-color .18s ease;
 }
-#brief::placeholder { color: var(--ash); }
-#brief:focus { box-shadow: 0 0 0 1px var(--border); }
+#brief::placeholder { color: var(--smoke); }
+#brief:focus { border-color: rgba(255,255,255,.22); }
 
-.compose-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.compose-row { display: flex; align-items: center; gap: 10px; margin-top: 20px; }
 
-.seg { display: inline-flex; gap: 0; background: rgba(255,255,255,.05); border-radius: 8px; padding: 2px; }
+.seg { display: inline-flex; gap: 0; background: rgba(255,255,255,.05); border-radius: 999px; padding: 3px; }
 .seg button {
-  background: none; border: 0; border-radius: 6px;
+  background: none; border: 0; border-radius: 999px;
   color: var(--ash);
-  font-size: 13px; font-weight: 500;
-  padding: 6px 12px;
+  font-size: 13.5px; font-weight: 500;
+  padding: 7px 15px;
   transition: color .15s, background .15s;
 }
 .seg button:hover { color: var(--white); }
@@ -233,13 +247,18 @@ button { cursor: pointer; }
 /* El grupo vídeo + datos se centra junto; el plano no se queda flotando solo. */
 .videostage { flex: 0 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
 
-/* El plano no lleva marco ni sombra: se sostiene solo y nada le compite. */
+/* El mismo marco con el que la landing presenta una captura: radio de 14,
+ * anillo de 1 px y un rescoldo coral muy bajo. Nada más — el plano manda. */
 .videowrap {
   position: relative;
   width: 100%; aspect-ratio: 16/9; max-height: 100%;
   background: #000;
-  border-radius: 8px;
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 40px 90px -40px rgba(0,0,0,.9),
+    0 0 120px -60px rgba(255,107,94,.45);
 }
 #player { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
 
@@ -249,11 +268,11 @@ button { cursor: pointer; }
   display: inline-flex; align-items: center; gap: 8px;
   background: rgba(4,5,6,.72);
   backdrop-filter: blur(48px);
-  border-radius: 6px;
-  box-shadow: rgba(255,255,255,.1) 0 0 0 1px;
-  padding: 6px 10px;
+  border-radius: 999px;
+  box-shadow: rgba(255,255,255,.14) 0 0 0 1px;
+  padding: 6px 12px;
   font-family: var(--mono);
-  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em;
   color: var(--white);
 }
 .chip i { width: 5px; height: 5px; border-radius: 50%; background: var(--ash); }
@@ -266,35 +285,65 @@ button { cursor: pointer; }
   font-size: 14px; text-align: center; padding: 24px;
 }
 
-.progress { height: 1px; background: var(--border); margin-top: 16px; }
-.progress i { display: block; height: 100%; width: 0; background: var(--ash); transition: width .4s ease; }
+.progress { height: 2px; border-radius: 99px; background: rgba(255,255,255,.07); margin-top: 20px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--ash); transition: width .4s ease; }
 
-.stagebar { display: flex; align-items: flex-end; gap: 40px; padding-top: 24px; }
+/* El bloque del spot es lo segundo que se lee después del plano, así que tiene
+ * saltos de verdad: kicker 11 → titular 30 → frase 17 → metadatos 11,5. */
+.stagebar { display: flex; align-items: center; gap: clamp(24px, 4vw, 56px); padding-top: 30px; }
 .stageinfo { min-width: 0; flex: 1; }
+
+.stagekicker {
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--coral);
+}
+.stagekicker.ready { color: var(--coral); }
+.stagekicker.good  { color: var(--ok); }
+.stagekicker.bad   { color: var(--bad); }
+.stagekicker.live  { color: var(--info); }
 
 .stageinfo h2 {
   margin: 0;
-  font-size: 20px; font-weight: 500; line-height: 1.2; letter-spacing: .0100em;
+  font-size: clamp(24px, 2.3vw, 32px);
+  font-weight: 620; line-height: 1.1; letter-spacing: -.03em;
   color: var(--white);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.say { margin: 8px 0 0; color: var(--ash); font-size: 14px; letter-spacing: .014em; }
-.say b { color: var(--white); font-weight: 500; }
+.say { margin: 14px 0 0; color: var(--ash); font-size: 17px; line-height: 1.55; letter-spacing: -.006em; }
+.say b { color: var(--white); font-weight: 550; }
 .say.good { color: var(--ok); }
 .say.bad  { color: var(--bad); }
 
-.stageact { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+/* Los datos de la ejecución: aquí abajo y en texto plano, no en pastillas en
+ * la primera línea de la pantalla. */
+.topmeta {
+  margin: 14px 0 0;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px;
+  font-family: var(--mono);
+  font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--smoke);
+}
+.tm { white-space: nowrap; }
+.tm + .tm::before { content: "·"; margin-right: 10px; color: var(--iron); }
+.tm.ok { color: var(--ok); }
+.tm.on { color: var(--info); }
+
+.stageact { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 
 /* — botones: la misma píldora coral que la landing —
  * El CTA es cromático a propósito y hay exactamente uno por pantalla: crear el
  * spot, o aprobarlo. Todo lo demás es neutro y no compite. */
 
+/* Exactamente el .btn de la landing: 38 px de alto, 18 de aire lateral, 14 px. */
 .primary, .ghost {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; padding: 0 18px;
   border-radius: 999px;
-  padding: 8px 16px;
-  font-size: 13px; font-weight: 550; letter-spacing: -.005em;
-  transition: background .15s, color .15s, border-color .15s, transform .15s;
+  font-size: 14px; font-weight: 550; letter-spacing: -.005em;
+  white-space: nowrap;
+  transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
 }
 .primary:active, .ghost:active { transform: translateY(1px); }
 
@@ -305,11 +354,11 @@ button { cursor: pointer; }
 .primary:hover { background: var(--coral-2); border-color: var(--coral-2); }
 .primary:disabled { opacity: .4; cursor: default; }
 .primary:disabled:hover { background: var(--coral); border-color: var(--coral); }
-.primary.big { padding: 11px 22px; font-size: 14px; }
+.primary.big { height: 46px; padding: 0 26px; font-size: 15px; }
 
 .ghost {
   background: rgba(255,255,255,.045);
-  border: 1px solid rgba(255,255,255,.09);
+  border: 1px solid var(--border);
   color: var(--white);
 }
 .ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16); }
@@ -324,29 +373,30 @@ button { cursor: pointer; }
 /* — pedir cambios — */
 
 .changes {
-  margin-top: 16px;
-  border-radius: 16px;
+  margin-top: 24px;
+  border-radius: 14px;
   box-shadow: var(--key);
   padding: 24px;
 }
 .changes > label {
-  display: block; margin-bottom: 8px;
+  display: block; margin-bottom: 10px;
   font-family: var(--mono);
-  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
   color: var(--smoke);
 }
 #note {
   width: 100%;
-  background: rgba(255,255,255,.05);
-  border: 0; border-radius: 8px;
-  padding: 12px;
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px;
   font-size: 16px; color: var(--white);
   resize: none; outline: none;
+  transition: border-color .18s ease;
 }
-#note::placeholder { color: var(--ash); }
-#note:focus { box-shadow: 0 0 0 1px var(--border); }
+#note::placeholder { color: var(--smoke); }
+#note:focus { border-color: rgba(255,255,255,.22); }
 
-.changes-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.changes-row { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
 .grow { flex: 1; }
 .pick { font-size: 13px; color: var(--smoke); }
 .pick select {
@@ -372,7 +422,7 @@ button { cursor: pointer; }
   padding: 24px 24px 16px;
   border-bottom: 1px solid var(--border);
 }
-.tech-top h3 { margin: 0; font-size: 16px; font-weight: 500; letter-spacing: .01em; }
+.tech-top h3 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.022em; }
 .tech-top p  { margin: 4px 0 0; font-family: var(--mono); font-size: 12px; color: var(--smoke); letter-spacing: .017em; }
 
 .tech-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
@@ -394,7 +444,7 @@ button { cursor: pointer; }
   list-style: none; cursor: pointer;
   padding: 16px 24px;
   font-family: var(--mono);
-  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
   color: var(--ash);
   display: flex; align-items: center; gap: 8px;
   user-select: none;
@@ -411,9 +461,9 @@ button { cursor: pointer; }
 .kv span:last-child  { color: var(--ash); word-break: break-all; }
 
 .subhead {
-  font-family: var(--mono); font-size: 10px;
-  text-transform: uppercase; letter-spacing: .05em;
-  color: var(--smoke); margin: 24px 0 8px;
+  font-family: var(--mono); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .12em;
+  color: var(--smoke); margin: 26px 0 10px;
 }
 
 .lin { font-family: var(--mono); font-size: 12px; color: var(--ash); line-height: 1.6; word-break: break-all; letter-spacing: .017em; }
@@ -509,21 +559,9 @@ button { cursor: pointer; }
    el feed de eventos de B2. Es la sustancia técnica del producto, curada —
    lo profundo (AgentLoop, objetos, chaos, verify) sigue en el panel. */
 
-.topmeta { display: flex; gap: 8px; margin-left: 24px; flex: 1; }
-.tm {
-  font-family: var(--mono);
-  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
-  color: var(--smoke);
-  background: var(--badge);
-  border-radius: 6px;
-  padding: 3px 6px;
-}
-.tm.ok { color: var(--ok); }
-.tm.on { color: var(--info); }
-
 .rail {
-  width: 308px; flex: 0 0 308px;
-  border-left: 1px solid var(--border);
+  width: 296px; flex: 0 0 296px;
+  border-left: 1px solid var(--border-2);
   background: var(--card);
   display: flex; flex-direction: column;
   overflow-y: auto;
@@ -531,15 +569,15 @@ button { cursor: pointer; }
 .rail::-webkit-scrollbar { width: 8px; }
 .rail::-webkit-scrollbar-thumb { background: var(--badge); border-radius: 8px; }
 
-.rail-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; border-bottom: 1px solid var(--border); }
+.rail-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 18px; border-bottom: 1px solid var(--border-2); }
 
-.rblock { padding: 16px; border-bottom: 1px solid var(--border); }
+.rblock { padding: 18px; border-bottom: 1px solid var(--border-2); }
 .rblock:last-child { border-bottom: 0; }
 .rblock h4 {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   font-family: var(--mono);
-  font-size: 10px; font-weight: 400;
-  text-transform: uppercase; letter-spacing: .05em;
+  font-size: 11px; font-weight: 400;
+  text-transform: uppercase; letter-spacing: .12em;
   color: var(--smoke);
   display: flex; align-items: center; gap: 8px;
 }

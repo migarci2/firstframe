@@ -425,6 +425,7 @@ function renderStage() {
     bar.hidden = true;
   }
 
+  topMeta();
   renderActions(job);
   renderNoteScenes(job);
 }
@@ -839,17 +840,25 @@ function renderChaos() {
  * Siempre visible: la sustancia técnica del run sin tener que abrir nada.
  * Es lo que hace que esto se lea como una herramienta y no como una maqueta. */
 
+/* Los datos de la ejecución ya no son pastillas en la cabecera: el estado es el
+ * kicker del bloque del spot y el resto una línea de texto mono debajo. */
 function topMeta() {
-  var box = $('topmeta');
+  var box = $('topmeta'), kick = $('spot-kicker');
   if (!box) return;
   clear(box);
   var job = selJob();
+
+  if (kick) {
+    var st = job ? statusOf(job) : null;
+    kick.textContent = st ? st.label : '';
+    kick.className = 'stagekicker' + (st && st.tone ? ' ' + st.tone : '');
+  }
   if (!job) return;
+
   function t(txt, cls) { box.appendChild(el('span', 'tm' + (cls ? ' ' + cls : ''), txt)); }
   t(job.id);
-  t(job.status, job.status === 'approved' ? 'ok' : (isLive(job) ? 'on' : ''));
-  if (job.first_frame_ms != null) t('ff ' + (job.first_frame_ms / 1000).toFixed(1) + 's');
-  if (job.total_render_ms != null) t('total ' + (job.total_render_ms / 1000).toFixed(1) + 's');
+  if (job.first_frame_ms != null) t('first frame ' + (job.first_frame_ms / 1000).toFixed(1) + 's');
+  if (job.total_render_ms != null) t('full render ' + (job.total_render_ms / 1000).toFixed(1) + 's');
   if (S.segs[job.id]) t(S.segs[job.id] + ' segments');
 }
 
@@ -1181,10 +1190,10 @@ function start() {
 
   $('btn-create').addEventListener('click', createSpot);
   $('btn-new').addEventListener('click', showCompose);
-  // El raíl se puede cerrar para que el plano respire al grabar.
+  // El raíl arranca cerrado: lo primero que se ve es el plano, a ancho completo.
+  // La evidencia sigue a un clic, y la profunda vive en el panel técnico.
   $('btn-rail').addEventListener('click', function () {
     var hid = document.body.classList.toggle('no-rail');
-    this.textContent = hid ? 'Show panel' : 'Hide panel';
     this.setAttribute('aria-expanded', hid ? 'false' : 'true');
   });
   $('btn-tech').addEventListener('click', function () { toggleTech(); });

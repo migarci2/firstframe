@@ -8,14 +8,14 @@
      (?v=) y el documento pide no cachearse. -->
 <meta http-equiv="Cache-Control" content="no-store">
 <title>FirstFrame</title>
-<link rel="stylesheet" href="/styles.css?v=15">
+<link rel="stylesheet" href="/styles.css?v=16">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 </head>
-<body>
+<body class="no-rail">
 
 <header class="top">
   <div class="wordmark">
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
       <g fill="#FF6B5E">
         <rect x="2" y="4" width="7" height="16" rx="1.4"/>
         <rect x="11.4" y="4" width="3.6" height="16" rx="1" opacity=".62"/>
@@ -25,8 +25,8 @@
     </svg>
     <span>FirstFrame</span>
   </div>
-  <div class="topmeta" id="topmeta"></div>
-  <button class="linkbtn" id="btn-rail" type="button" aria-expanded="true">Hide panel</button>
+  <span class="grow"></span>
+  <button class="linkbtn" id="btn-rail" type="button" aria-expanded="false">Run panel</button>
   <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Technical details</button>
 </header>
 
@@ -71,8 +71,10 @@
 
       <div class="stagebar">
         <div class="stageinfo">
+          <p class="stagekicker" id="spot-kicker"></p>
           <h2 id="spot-title">—</h2>
           <p class="say" id="spot-line">—</p>
+          <p class="topmeta" id="topmeta"></p>
         </div>
         <div class="stageact" id="stage-actions"></div>
       </div>
@@ -167,6 +169,6 @@
 
 <script src="/vendor/hls.min.js"></script>
 <script src="/mse.js"></script>
-<script src="/app.js?v=14"></script>
+<script src="/app.js?v=15"></script>
 </body>
 </html>
