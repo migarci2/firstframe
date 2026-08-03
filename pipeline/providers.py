@@ -91,6 +91,21 @@ def _run(args: list[str]) -> None:
         raise RuntimeError(f"ffmpeg fallo ({proc.returncode}):\n{tail}")
 
 
+# mimetypes.guess_type() lee la base de datos de mime del SISTEMA, y en una imagen
+# slim esa base no conoce .m4a: devuelve application/octet-stream. `FFmpegCompositor`
+# exige un input cuyo media_type empiece por "audio/", asi que el fan-in del step 3
+# reventaba con "No audio asset found" SOLO dentro del contenedor, no en el portatil.
+# Este mapa fija los tipos que produce el pipeline y no depende del host.
+_MEDIA_TYPES = {
+    ".m4a": "audio/mp4", ".aac": "audio/aac", ".mp3": "audio/mpeg",
+    ".wav": "audio/wav", ".opus": "audio/opus",
+    ".mp4": "video/mp4", ".m4s": "video/iso.segment", ".ts": "video/mp2t",
+    ".webm": "video/webm", ".mov": "video/quicktime",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
 def local_asset(path: str | Path, **extra) -> Asset:
     """Asset con sha256 + size reales a partir de un fichero local.
 
@@ -99,7 +114,7 @@ def local_asset(path: str | Path, **extra) -> Asset:
     """
     p = Path(path).resolve()
     data = p.read_bytes()
-    media_type, _ = mimetypes.guess_type(p.name)
+    media_type = _MEDIA_TYPES.get(p.suffix.lower()) or mimetypes.guess_type(p.name)[0]
     return Asset(
         url=p.as_uri(),
         media_type=media_type or "application/octet-stream",
