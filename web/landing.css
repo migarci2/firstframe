@@ -52,20 +52,20 @@
 /* ───────────────────────── sistema ───────────────────────── */
 
 :root {
-  --ground:   #0A0C0E;
-  --ground-2: #101317;
-  --ink:      #EDE7DC;
-  --ink-2:    #9EA5A8;
+  --ground:   #040506;
+  --ground-2: #07080a;
+  --ink:      #ffffff;
+  --ink-2:    #9c9c9d;
   --muted:    #6C7378;
-  --amber:    #E8913C;
-  --teal:     #2E6B72;
-  --teal-ink: #7CBEC4;   /* el teal de la spec sobre casi negro da 3.3:1; para
+  --amber:    #ff6363;
+  --teal:     #56c2ff;
+  --teal-ink: #59d499;   /* el teal de la spec sobre casi negro da 3.3:1; para
                             texto se sube el tono manteniendo el mismo matiz */
-  --hair:     rgba(237,231,220,.13);
-  --hair-2:   rgba(237,231,220,.07);
+  --hair:     #363739;
+  --hair-2:   rgba(255,255,255,.06);
 
-  --display: 'Syne', system-ui, sans-serif;
-  --text:    'Sora', system-ui, sans-serif;
+  --display: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --text:    'Inter', ui-sans-serif, system-ui, sans-serif;
 
   --gut: clamp(20px, 5vw, 72px);
 }
@@ -105,7 +105,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 h1, h2, h3, .display {
   font-family: var(--display);
   font-weight: 700;
-  letter-spacing: -.025em;
+  letter-spacing: .004em;
   line-height: 1.02;
   margin: 0;
 }
@@ -129,7 +129,7 @@ h1, h2, h3, .display {
   font-family: var(--display);
   font-weight: 800;
   font-size: 15px;
-  letter-spacing: -.02em;
+  letter-spacing: .004em;
 }
 .nav .mark i { color: var(--amber); font-style: normal; }
 .nav .links { display: flex; gap: 22px; margin-left: auto; }
@@ -241,7 +241,7 @@ h1, h2, h3, .display {
   font-family: var(--display);
   font-weight: 800;
   font-size: clamp(30px, 7.6vw, 118px);
-  letter-spacing: -.02em;
+  letter-spacing: .004em;
   line-height: 1;
   white-space: nowrap;
   display: flex;
@@ -282,7 +282,7 @@ h1, h2, h3, .display {
   font-weight: 600;
   font-size: clamp(24px, 3.6vw, 52px);
   line-height: 1.16;
-  letter-spacing: -.025em;
+  letter-spacing: .004em;
   max-width: 22ch;
   margin: 22px 0 0;
 }
@@ -414,7 +414,7 @@ h1, h2, h3, .display {
   padding: 24px 0;
   border-bottom: 1px solid var(--hair);
 }
-.row .nm { font-family: var(--display); font-weight: 600; font-size: clamp(19px, 2.3vw, 30px); letter-spacing: -.02em; }
+.row .nm { font-family: var(--display); font-weight: 600; font-size: clamp(19px, 2.3vw, 30px); letter-spacing: .004em; }
 .row .ct { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--ink-2); }
 @media (max-width: 720px) { .row { grid-template-columns: 1fr auto; } .row .label { grid-column: 1 / -1; } }
 
@@ -436,7 +436,7 @@ h1, h2, h3, .display {
   font-family: var(--display);
   font-weight: 600;
   font-size: clamp(16px, 1.9vw, 21px);
-  letter-spacing: -.02em;
+  letter-spacing: .004em;
   color: var(--ink);
 }
 .tbl td b { color: var(--amber); font-weight: 600; }
@@ -474,7 +474,7 @@ h1, h2, h3, .display {
   font-weight: 800;
   font-size: 9.3vw;
   line-height: .78;
-  letter-spacing: -.035em;
+  letter-spacing: .004em;
   text-align: center;
   color: var(--ink);
   margin: 40px 0 -2.4vw;
