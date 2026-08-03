@@ -428,19 +428,19 @@ Stated here because a judge with repo access should read it from us.
 
 - **Repo:** https://github.com/migarci2/genblaze-hackathon
 - **Live URL:** https://firstframe.migarci2.dev
-- **Demo access code:** `FIRSTFRAME`
+- **Demo access code:** `BRNV-5442`
 - **Video:** _pending_
 
 > The review room sits behind a short access code so the demo behaves like the real
 > product. Judges: open https://firstframe.migarci2.dev, click through to the app (or go straight to
-> https://firstframe.migarci2.dev/app), enter `FIRSTFRAME`, and you
+> https://firstframe.migarci2.dev/app), enter `BRNV-5442`, and you
 > land on the projects view with a project already in progress. The marketing page at
 > https://firstframe.migarci2.dev is public and needs no code.
 
 ## Submission checklist
 
 - [x] Live URL with preloaded data and a "New spot" button that costs the judges nothing
-      (`GEN_MODE=free` with a warm keyframe corpus). Access code `FIRSTFRAME`, stated
+      (`GEN_MODE=free` with a warm keyframe corpus). Access code `BRNV-5442`, stated
       above and in the README. Tested from incognito.
 - [ ] Video ≤3 min, unlisted, with the on-screen numbers and the failover on camera.
 - [ ] Repo public, or `b2genblaze` invited if private.

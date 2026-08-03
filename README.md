@@ -12,7 +12,7 @@ Backblaze Generative Media Hackathon · Genblaze 0.4.5 + Backblaze B2.
 
 | | |
 |---|---|
-| **Review room** | **https://firstframe.migarci2.dev/app** — access code **`FIRSTFRAME`** |
+| **Review room** | **https://firstframe.migarci2.dev/app** — access code **`BRNV-5442`** |
 | **Marketing page** | https://firstframe.migarci2.dev — public, no code |
 
 The room sits behind a short access code so the demo behaves like the real product.
