@@ -240,7 +240,7 @@ h1, h2, h3, .display {
 .ptitle .t {
   font-family: var(--display);
   font-weight: 800;
-  font-size: clamp(46px, 12.5vw, 190px);
+  font-size: clamp(30px, 7.6vw, 118px);
   letter-spacing: -.02em;
   line-height: 1;
   white-space: nowrap;
@@ -289,7 +289,7 @@ h1, h2, h3, .display {
 .numeral {
   position: absolute;
   right: var(--gut);
-  bottom: 6vh;
+  bottom: 1vh;
   font-family: var(--display);
   font-weight: 800;
   font-size: clamp(120px, 26vw, 380px);
@@ -311,7 +311,8 @@ h1, h2, h3, .display {
   z-index: 0;
   will-change: transform;
 }
-.statement > * { position: relative; z-index: 1; }
+/* Sólo el texto sube de capa: el orbe y el numeral siguen siendo absolutos. */
+.statement > .label, .statement > .big { position: relative; z-index: 1; }
 @media (max-width: 860px) { .orb { display: none; } }
 
 /* ───────────────────────── catálogo + baraja ───────────────────────── */
@@ -380,7 +381,7 @@ h1, h2, h3, .display {
   border-top: 1px solid var(--hair-2);
   padding-top: 10px;
 }
-.card .foot b { color: var(--ink); font-weight: 600; }
+.card .foot b { color: var(--ink); font-weight: 600; text-transform: none; letter-spacing: .02em; }
 
 .hint {
   margin: 18px 0 0;
@@ -465,18 +466,20 @@ h1, h2, h3, .display {
   flex-wrap: wrap;
 }
 
+/* Ancho completo y recortado por el borde inferior de la página, no por los
+   lados: "FIRSTFRAME" mide ~11 veces su cuerpo en Syne 800. */
+.close { padding-bottom: 0; overflow: hidden; }
 .bigmark {
   font-family: var(--display);
   font-weight: 800;
-  font-size: 19.4vw;
+  font-size: 9.3vw;
   line-height: .78;
   letter-spacing: -.035em;
   text-align: center;
   color: var(--ink);
-  margin: 34px 0 0;
-  transform: translateY(16%);
+  margin: 40px 0 -2.4vw;
+  transform: translateY(14%);
   white-space: nowrap;
-  overflow: hidden;
 }
 
 /* ───────────────────────── revelados ───────────────────────── */
