@@ -145,44 +145,47 @@ img { max-width: 100%; display: block; }
  * Las esquirlas se salen del marco por los lados a propósito: así lo único que
  * se ve son diagonales, nunca el corte recto de un borde horizontal. */
 .shards {
-  position: absolute; inset: 0 0 auto 0; height: 1080px;
-  z-index: -2; pointer-events: none; overflow: hidden;
+  position: absolute; inset: 0 0 auto 0; height: 860px;
+  z-index: -2; pointer-events: none;
 }
-.shards i { position: absolute; display: block; }
+/* Bandas, no manchas: cada una es estrecha y va muy separada de la siguiente,
+ * para que entre ellas siga viéndose el negro. Nada de bordes horizontales
+ * duros — o van redondeadas, o son radiales. */
+.shards i { position: absolute; display: block; border-radius: 60px; }
 
+/* Esquirla larga que entra por la izquierda y pasa por detrás del titular. */
 .s1 {
-  left: -16%; top: -10%; width: 72%; height: 62%;
-  background: linear-gradient(102deg, #FF3B26 0%, #FF7A5C 68%, rgba(255,122,92,0) 100%);
-  clip-path: polygon(15% 0, 100% 10%, 84% 100%, 0 76%);
-  transform: rotate(-12deg);
-  filter: blur(88px); opacity: .78;
+  left: -18%; top: 16%; width: 66%; height: 104px;
+  background: linear-gradient(96deg, rgba(255,59,38,0) 0%, #FF3B26 22%, #FF8A63 100%);
+  transform: rotate(-17deg);
+  filter: blur(42px); opacity: .92;
 }
+/* Su pareja, entrando por la derecha y cruzándose con la primera. */
 .s2 {
-  right: -20%; top: -14%; width: 70%; height: 66%;
-  background: linear-gradient(252deg, #FF6047 0%, #D4341F 62%, rgba(212,52,31,0) 100%);
-  clip-path: polygon(0 13%, 92% 0, 100% 80%, 16% 100%);
-  transform: rotate(10deg);
-  filter: blur(100px); opacity: .62;
+  right: -20%; top: 25%; width: 62%; height: 88px;
+  background: linear-gradient(258deg, rgba(255,110,82,0) 0%, #FF6E52 26%, #C9331F 100%);
+  transform: rotate(15deg);
+  filter: blur(46px); opacity: .8;
 }
-/* la banda que cruza justo por detrás del titular */
+/* Astilla fina y clara, la que da el brillo justo bajo el titular. */
 .s3 {
-  left: -12%; top: 24%; width: 124%; height: 30%;
-  background: linear-gradient(90deg, rgba(255,90,70,0) 0%, #FF6B5E 40%, #FF9E7C 64%, rgba(255,158,124,0) 100%);
+  left: 12%; top: 47%; width: 76%; height: 46px;
+  background: linear-gradient(90deg, rgba(255,169,138,0) 0%, #FF9E7C 38%, #FFC0A5 60%, rgba(255,192,165,0) 100%);
   transform: rotate(-5deg);
-  filter: blur(115px); opacity: .5;
+  filter: blur(38px); opacity: .62;
 }
+/* Rescoldo sin bordes que pega las tres a la vez. */
 .s4 {
-  left: 37%; top: -8%; width: 26%; height: 50%;
-  background: linear-gradient(180deg, #FFC3A8 0%, rgba(255,195,168,0) 100%);
-  clip-path: polygon(36% 0, 64% 0, 100% 100%, 0 100%);
-  filter: blur(76px); opacity: .4;
+  left: 14%; top: 22%; width: 72%; height: 380px;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(255,107,94,.55) 0%, rgba(255,107,94,0) 72%);
+  filter: blur(80px); opacity: .7;
 }
 /* velo: devuelve el negro por los bordes y deja el titular limpio encima */
 .hero::before {
   content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(78% 46% at 50% 30%, rgba(8,9,10,.62) 0%, rgba(8,9,10,.34) 48%, rgba(8,9,10,.8) 100%),
-    linear-gradient(180deg, rgba(8,9,10,.62) 0%, rgba(8,9,10,.1) 22%, rgba(8,9,10,.72) 62%, var(--bg) 88%);
+    radial-gradient(66% 42% at 50% 34%, rgba(8,9,10,0) 0%, rgba(8,9,10,.42) 62%, rgba(8,9,10,.9) 100%),
+    linear-gradient(180deg, rgba(8,9,10,.86) 0%, rgba(8,9,10,.12) 20%, rgba(8,9,10,.3) 56%, var(--bg) 84%);
 }
 
 .eyebrow {
@@ -364,13 +367,15 @@ h2 {
 .split-txt .lede { font-size: 16px; max-width: 44ch; }
 
 .facts { margin: 26px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+/* Nada de flex aquí: el <b> y el <code> de dentro se convertirían en cajas
+ * flex sueltas y la frase se rompería en columnas. Viñeta absoluta. */
 .facts li {
-  display: flex; gap: 11px; align-items: flex-start;
-  font-size: 14.5px; color: var(--ink-2); line-height: 1.5;
+  position: relative; padding-left: 17px;
+  font-size: 14.5px; color: var(--ink-2); line-height: 1.55;
 }
 .facts li::before {
-  content: ''; flex: none; width: 5px; height: 5px; margin-top: 8px;
-  border-radius: 50%; background: var(--coral);
+  content: ''; position: absolute; left: 0; top: .68em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--coral);
 }
 .facts b { color: var(--ink); font-weight: 550; }
 .facts code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
@@ -394,12 +399,14 @@ h2 {
 /* ───────────────────────────── cierre ───────────────────────────── */
 
 .close { padding: 130px 0 90px; text-align: center; position: relative; overflow: hidden; }
+/* Sin clip-path: el recorte se aplica DESPUÉS del blur y devuelve un cuadrilátero
+ * de bordes duros. Rectángulo redondeado girado, como las esquirlas del hero. */
 .close::before {
-  content: ''; position: absolute; left: 50%; top: 10%; z-index: -1;
-  width: 620px; height: 320px; transform: translateX(-50%) rotate(-6deg);
-  background: linear-gradient(96deg, #FF4D3D, #FF9178);
-  clip-path: polygon(12% 0, 100% 16%, 88% 100%, 0 80%);
-  filter: blur(110px); opacity: .34;
+  content: ''; position: absolute; left: 50%; top: 14%; z-index: -1;
+  width: 620px; height: 150px; transform: translateX(-50%) rotate(-7deg);
+  background: linear-gradient(96deg, #FF3B26, #FF9178);
+  border-radius: 90px;
+  filter: blur(64px); opacity: .5;
 }
 .close h2 { font-size: clamp(32px, 5.2vw, 60px); max-width: 18ch; }
 .close .hero-acts { margin-top: 32px; }
