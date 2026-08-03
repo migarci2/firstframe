@@ -336,7 +336,7 @@ def _stub_runner(job_id: str, brief: str, scene_count: int, on_scene, on_event) 
             subprocess.run([
                 "ffmpeg", "-loglevel", "error", "-y",
                 "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=24:duration=6",
-                "-vf", f"drawtext=text='{job_id} — escena {n}/{scene_count}':"
+                "-vf", f"drawtext=text='{job_id} — scene {n}/{scene_count}':"
                        f"fontcolor=white:fontsize=42:x=40:y=40,"
                        f"drawtext=text='{label}':fontcolor=white:fontsize=28:x=40:y=110",
                 "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(mp4),
@@ -511,7 +511,7 @@ def _refine_scene(job_id: str, n: int, note: str | None, take: int) -> Path:
     subprocess.run([
         "ffmpeg", "-loglevel", "error", "-y",
         "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=24:duration=6",
-        "-vf", f"drawtext=text='{job_id} — escena {n} · toma refinada {take}':"
+        "-vf", f"drawtext=text='{job_id} — scene {n} · refined take {take}':"
                f"fontcolor=white:fontsize=38:x=40:y=40,"
                f"drawtext=text='AgentLoop: {txt}':fontcolor=yellow:fontsize=26:x=40:y=110",
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(out),
