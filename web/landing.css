@@ -59,6 +59,11 @@
 
   --pad: clamp(20px, 5vw, 56px);
   --max: 1180px;
+
+  /* Las capturas no viven en la columna de texto: tienen su propia caja, más
+   * ancha y con menos margen, porque a 640 px una interfaz no se lee. */
+  --pad-wide: clamp(16px, 3vw, 40px);
+  --max-wide: 1520px;
 }
 
 * { box-sizing: border-box; }
@@ -83,6 +88,7 @@ a { color: inherit; text-decoration: none; }
 img { max-width: 100%; display: block; }
 
 .wrap { width: 100%; max-width: var(--max); margin: 0 auto; padding: 0 var(--pad); }
+.wrap.wide { max-width: var(--max-wide); padding: 0 var(--pad-wide); }
 
 /* ───────────────────────────── nav ───────────────────────────── */
 
@@ -232,23 +238,23 @@ h1 em { font-style: normal; color: var(--coral); }
 }
 
 /* la captura que cuelga del hero, como en Raycast */
-.hero-shot { margin-top: 66px; padding-bottom: 8px; }
+.hero-shot { margin-top: clamp(48px, 5.6vw, 76px); padding-bottom: 8px; }
 
 .frame {
   position: relative;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--bg-2);
   overflow: hidden;
   box-shadow:
     0 1px 0 rgba(255,255,255,.05) inset,
-    0 40px 90px -30px rgba(0,0,0,.9),
-    0 0 120px -50px rgba(255,107,94,.5);
+    0 50px 110px -34px rgba(0,0,0,.92),
+    0 0 150px -56px rgba(255,107,94,.5);
 }
 .frame img { width: 100%; height: auto; }
 .frame::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: 0 0 0 1px rgba(255,255,255,.045) inset;
 }
 
@@ -421,17 +427,16 @@ h2 {
 
 /* ───────────────────────────── bloques alternos ───────────────────────────── */
 
-/* La captura manda: se lleva la columna ancha en los dos sentidos. Al voltear
- * hay que voltear también los anchos, o el segundo bloque sale encogido. */
-.split {
-  display: grid; grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr);
-  gap: clamp(28px, 4vw, 56px); align-items: center;
+/* El texto va delante y estrecho; la captura debajo, a todo el ancho de la caja
+ * ancha. Antes compartían fila y la interfaz salía a 640 px: ilegible. */
+.show + .show { margin-top: clamp(80px, 9vw, 128px); }
+.show-txt {
+  max-width: 46ch;
+  margin: 0 auto clamp(30px, 3.4vw, 46px);
+  text-align: center;
 }
-.split + .split { margin-top: 96px; }
-.split.flip { grid-template-columns: minmax(0,1.28fr) minmax(0,.72fr); }
-.split.flip > .split-txt { order: 2; }
-.split-txt h2 { font-size: clamp(26px, 3.1vw, 36px); max-width: 16ch; }
-.split-txt .lede { font-size: 16px; max-width: 44ch; }
+.show-txt h2 { font-size: clamp(28px, 3.4vw, 42px); max-width: 18ch; margin-inline: auto; }
+.show-txt .lede { font-size: 17px; max-width: 52ch; margin-inline: auto; }
 
 .facts { margin: 26px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 /* Nada de flex aquí: el <b> y el <code> de dentro se convertirían en cajas
@@ -487,8 +492,6 @@ h2 {
 
 @media (max-width: 960px) {
   .cards { grid-template-columns: 1fr; }
-  .split, .split.flip { grid-template-columns: 1fr; }
-  .split.flip > .split-txt { order: 0; }
   .nav-links { display: none; }
 }
 @media (max-width: 620px) {

@@ -397,6 +397,18 @@ button { cursor: pointer; }
 #note:focus { border-color: rgba(255,255,255,.22); }
 
 .changes-row { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+
+/* Con el formulario abierto, la acción evidente es enviar los cambios. El
+ * coral de "Approve" se apaga para que no haya dos CTAs discutiendo. */
+.spot:has(#changes:not([hidden])) #stage-actions .primary {
+  background: rgba(255,255,255,.045);
+  border-color: var(--border);
+  color: var(--white);
+  font-weight: 550;
+}
+.spot:has(#changes:not([hidden])) #stage-actions .primary:hover {
+  background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16);
+}
 .grow { flex: 1; }
 .pick { font-size: 13px; color: var(--smoke); }
 .pick select {
@@ -587,8 +599,12 @@ button { cursor: pointer; }
 .rblock .scenerow { padding: 6px 0; }
 .rblock-feed { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .rblock-feed .feed { flex: 1; min-height: 120px; max-height: none; overflow-y: auto; }
+/* En 296 px, tres columnas rompen las claves de B2 letra a letra. El detalle
+   baja a su propia línea y se lee. */
+.rblock-feed .feedrow { flex-wrap: wrap; margin-bottom: 7px; }
 .rblock-feed .feedrow .t { flex: 0 0 48px; }
-.rblock-feed .feedrow .k { flex: 0 0 96px; }
+.rblock-feed .feedrow .k { flex: 1 1 auto; }
+.rblock-feed .feedrow .d { flex: 0 0 100%; padding-left: 56px; color: var(--smoke); }
 
 /* El raíl se cierra desde la cabecera: el jurado ve la evidencia y quien graba
    puede dejar el plano a ancho completo. */

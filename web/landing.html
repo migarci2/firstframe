@@ -7,7 +7,7 @@
 <title>FirstFrame — watch the spot before it finishes rendering</title>
 <meta name="description" content="FirstFrame streams every scene as it is generated, so the first reviewable frame lands in seconds instead of at the end of the render.">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/landing.css?v=35">
+<link rel="stylesheet" href="/landing.css?v=36">
 </head>
 <body>
 
@@ -41,10 +41,10 @@
     </div>
   </div>
 
-  <div class="wrap hero-shot rv d3">
+  <div class="wrap wide hero-shot rv d3">
     <figure class="frame" id="heroshot">
-      <img src="/assets/ui-review.jpg" width="2400" height="1337"
-           alt="The FirstFrame review room mid-render: scene one is already playing while the panel shows scenes two and three still pending and B2 segment events arriving live.">
+      <img src="/assets/ui-review.png" width="3200" height="2000" fetchpriority="high"
+           alt="The FirstFrame review room mid-render: the opening scene is already playing, the run panel shows two scenes ready and four still pending, and B2 segment events are landing live.">
     </figure>
   </div>
 </header>
@@ -109,34 +109,38 @@
   </div>
 </section>
 
-<!-- ═══════════════════════ bloques alternos ═══════════════════════ -->
+<!-- ═══════════════════════ dos momentos de la sala ═══════════════════════
+     La captura ya no comparte fila con el texto: cabe entera y a tamaño real,
+     que es la única manera de que se entienda lo que se está enseñando. -->
 <section class="sec">
-  <div class="wrap">
-    <div class="split">
-      <div class="split-txt">
+  <div class="wrap wide">
+
+    <div class="show">
+      <div class="show-txt">
         <p class="kicker rv">Change it</p>
         <h2 class="rv d1">Send it back mid&#8209;render.</h2>
         <p class="lede rv d2">Say what is wrong in plain words. The scene is re-run and the new take
           replaces it in place.</p>
       </div>
       <figure class="frame rv d1">
-        <img src="/assets/ui-changes.jpg" width="2200" height="1452" loading="lazy"
+        <img src="/assets/ui-changes.png" width="3200" height="2000" loading="lazy"
              alt="The FirstFrame review room with the change request open: a plain-language note and a picker for which scene it applies to.">
       </figure>
     </div>
 
-    <div class="split flip">
-      <div class="split-txt">
+    <div class="show">
+      <div class="show-txt">
         <p class="kicker rv">Approve it</p>
         <h2 class="rv d1">Then it stops being deletable.</h2>
         <p class="lede rv d2">Approving locks the spot for 30 days. The panel shows the lock next to
           the player, not in a log file.</p>
       </div>
       <figure class="frame rv d1">
-        <img src="/assets/ui-approved.jpg" width="2200" height="1396" loading="lazy"
+        <img src="/assets/ui-approved.png" width="3200" height="2000" loading="lazy"
              alt="An approved spot in FirstFrame: the header reads APPROVED and the panel shows the object is locked for 30 days.">
       </figure>
     </div>
+
   </div>
 </section>
 
@@ -168,6 +172,6 @@
   </footer>
 </div>
 
-<script src="/landing.js?v=32"></script>
+<script src="/landing.js?v=33"></script>
 </body>
 </html>
