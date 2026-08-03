@@ -828,7 +828,7 @@ def demo() -> None:
             # El arco: tres escenas, tres planos distintos, mismo ancla.
             arc = [keyframe_prompt(Scene(i, t, "", "", ""), "serum, marmol blanco",
                                    None, 0, mode="free")
-                   for i, t in ((1, "apertura"), (2, "detalle"), (3, "cierre"))]
+                   for i, t in ((1, "opening"), (2, "detail"), (3, "closing"))]
             assert len({a.split(".")[0] for a in arc}) == 3, arc
             assert all(PR.parse_brief("serum, marmol blanco").palette in a
                        for a in arc)

@@ -309,8 +309,8 @@ def _normalize_result(result) -> dict:
 
 # ------------------------------------------------------------------ runner stub
 _STUB_TITLES = [
-    "Plano general de apertura", "Detalle de producto", "Movimiento de camara",
-    "Producto sobre fondo limpio", "Uso en contexto real", "Cierre con claim",
+    "Opening wide", "Product detail", "Camera move",
+    "Product on clean backdrop", "In-context use", "Closing claim",
 ]
 
 

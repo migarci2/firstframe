@@ -552,7 +552,7 @@ def demo() -> None:
     #    todas en el negativo.
     for brief in ("crema facial antiedad", "perfume de noche", "zapatilla de "
                   "running", "cafe de especialidad"):
-        for n, title in ((1, "apertura"), (2, "detalle"), (3, "cierre")):
+        for n, title in ((1, "opening"), (2, "detail"), (3, "closing")):
             text = keyframe_prompt(brief, n=n, title=title).lower()
             assert " no people" not in text and "without people" not in text, text
             # \b: no basta con `not in` — "faceted" contiene "face" y el
@@ -571,7 +571,7 @@ def demo() -> None:
     for brief in briefs:
         spec = parse_brief(brief)
         prompts = [keyframe_prompt(brief, n=i, title=t, total=3)
-                   for i, t in ((1, "apertura"), (2, "detalle"), (3, "cierre"))]
+                   for i, t in ((1, "opening"), (2, "detail"), (3, "closing"))]
         assert all(spec.subject in p for p in prompts), brief
         # Paleta y tratamiento IDENTICOS en las 3 (eso es la coherencia); la
         # luz la comparten apertura y detalle, el heroe la cambia por plato.

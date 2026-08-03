@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="FirstFrame">
+  <!-- The first frame is solid; the rest of the render is still arriving. -->
+  <g fill="#FF6B5E">
+    <rect x="2" y="4" width="7" height="16" rx="1.4"/>
+    <rect x="11.4" y="4" width="3.6" height="16" rx="1" opacity=".62"/>
+    <rect x="16.9" y="4" width="2.2" height="16" rx=".8" opacity=".36"/>
+    <rect x="20.9" y="4" width="1.2" height="16" rx=".6" opacity=".2"/>
+  </g>
+</svg>
