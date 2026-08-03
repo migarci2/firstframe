@@ -7,7 +7,7 @@ Live: **https://firstframe.migarci2.dev** — the review room is at `/app`, acce
 **`FIRSTFRAME`**. Built on Backblaze B2 and Genblaze 0.4.5. Total cloud spend on generation
 for this project: **$0.00**.
 
-<!-- GIF: hero-first-frame -->
+![The first frame lands at 9.3 s; the full render takes 65.7 s](https://raw.githubusercontent.com/migarci2/genblaze-hackathon/master/docs/gifs/concept-race.gif)
 *Paste a brief, press New spot. The two clocks start; the first frame lands while the
 "full render" clock is still counting. Ends with both clocks stopped and the ratio visible.*
 
@@ -58,7 +58,7 @@ no credentials of ours in the path.
    scene, and the discarded take drops into `rejected/` as evidence with a lineage edge back
    to the run that produced it.
 
-   <!-- GIF: reject-refine -->
+   ![A spot playing while the remaining scenes are still generating](https://raw.githubusercontent.com/migarci2/genblaze-hackathon/master/docs/gifs/first-frame.gif)
    *Reject a scene with a note mid-render: the discarded take drops to `rejected/`, the
    refined take is appended to the same live playlist as a new scene, and the inspector shows
    the lineage edge back to the rejected run.*
@@ -174,7 +174,7 @@ have to delete the *specific version*, and that is what B2 rejects. Both
 `pipeline/manifest.py` and `server/b2.py` do exactly this in their `demo()`: upload, read the
 retention back, delete the version, assert the `AccessDenied`.
 
-<!-- GIF: object-lock-denied -->
+![A delete bounces off an object under Object Lock GOVERNANCE](https://raw.githubusercontent.com/migarci2/genblaze-hackathon/master/docs/gifs/concept-object-lock.gif)
 *Terminal running `python -m server.b2`: upload → read retention back → attempt to delete the
 specific VersionId → B2 answers AccessDenied → self-check passes.*
 
@@ -201,7 +201,7 @@ namePrefix against what was requested, and then asserts the negatives: `b2_get_u
 must come back **401**, and an S3 `list_objects_v2` must come back **403 AccessDenied**. Any
 failure exits 1.
 
-<!-- GIF: restricted-keys -->
+![brief to scene to HLS segments to Backblaze B2 to player](https://raw.githubusercontent.com/migarci2/genblaze-hackathon/master/docs/gifs/concept-pipeline.gif)
 *Terminal running `python infra/make_keys.py`: both keys created, capabilities compared, then
 the negative assertions — write → 401, list → 403 AccessDenied — printing green.*
 
@@ -253,7 +253,7 @@ fallback still has somewhere to go, and delegates through `inner.invoke()` rathe
 preserving the real `error_code`. The self-check asserts the step ended on `seedance-2-0`
 with `fallback_from == "pixverse-v5.6"`.
 
-<!-- GIF: chaos-failover -->
+![The timeline: one clip per scene, filling in as each render lands](https://raw.githubusercontent.com/migarci2/genblaze-hackathon/master/docs/gifs/timeline.gif)
 *In the review room: press `k`, kill `pixverse-v5.6`, and the render continues — the
 inspector shows the step finishing on `seedance-2-0` with `fallback_from` set.*
 
@@ -276,7 +276,7 @@ the one that was approved. (Note for anyone reproducing this: **genblaze 0.4.5 d
 install a `genblaze` CLI** — no `entry_points`. Our code uses the CLI when it is on `PATH` and
 otherwise runs the identical checks in-process, reporting which of the two ran in `method`.)
 
-<!-- GIF: approve-lock-verify -->
+![Approving seals the master under Object Lock for 30 days](https://raw.githubusercontent.com/migarci2/genblaze-hackathon/master/docs/gifs/object-lock.gif)
 *Approve a spot: the lock badge appears, the inspector shows the embedded manifest, and the
 verify button returns green with the re-hashed assets listed.*
 
