@@ -68,6 +68,41 @@ def _err(status: int, msg: str, **extra):
     return JSONResponse({"error": msg, **extra}, status_code=status)
 
 
+# ---------------------------------------------------------------- projects
+# Un proyecto agrupa spots. Se persiste en su propia tabla para que uno recien
+# creado y todavia vacio siga existiendo al recargar.
+@app.get("/api/projects")
+def list_projects():
+    if _stub():
+        from server import stubdata
+
+        names: dict[str, int] = {}
+        for j in stubdata.jobs():
+            names[j.get("project") or "Untitled Project"] = \
+                names.get(j.get("project") or "Untitled Project", 0) + 1
+        return {"projects": [{"name": n, "spots": c, "created_at": 0}
+                             for n, c in names.items()]}
+    from server import jobs
+
+    return {"projects": jobs.list_projects()}
+
+
+@app.post("/api/projects")
+async def create_project(req: Request):
+    body = await _json(req)
+    name = (body.get("name") or "").strip()
+    if not name:
+        return _err(400, "name is required")
+    if len(name) > 64:
+        name = name[:64]
+    if _stub():
+        return JSONResponse({"project": {"name": name, "spots": 0, "created_at": 0}},
+                            status_code=201)
+    from server import jobs
+
+    return JSONResponse({"project": jobs.create_project(name)}, status_code=201)
+
+
 # ---------------------------------------------------------------- jobs
 @app.get("/api/jobs")
 def list_jobs():
@@ -92,10 +127,12 @@ async def create_job(req: Request):
         j = dict(stubdata.jobs()[0])
         j["brief"] = brief
         j["title"] = body.get("title") or brief[:48]
+        j["project"] = body.get("project") or "Untitled Project"
         return JSONResponse({"id": j["id"], "job": j}, status_code=201)
     from server import jobs
 
-    j = jobs.create_job(brief, title=body.get("title"), scenes=body.get("scenes"))
+    j = jobs.create_job(brief, title=body.get("title"), scenes=body.get("scenes"),
+                        project=body.get("project"))
     return JSONResponse({"id": j["id"], "job": j}, status_code=201)
 
 

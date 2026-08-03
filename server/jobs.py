@@ -40,6 +40,35 @@ class NotReviewable(Exception):
 
 
 # ------------------------------------------------------------------ serializacion
+def _col(row, name: str):
+    """Lectura tolerante de una columna que puede no existir (DB sin migrar)."""
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return None
+
+
+def _timeline(job_id: str) -> dict[int, dict]:
+    """Geometria REAL de la linea de tiempo: {scene_n: {start, seconds}} en segundos.
+
+    Los segmentos HLS ya llevan su duracion y su escena, y se concatenan en orden de
+    `seq`: eso es literalmente un timeline. La escena 0 es la cabecera del leader.
+    """
+    from server import db
+
+    out: dict[int, dict] = {}
+    t = 0.0
+    for s in db.segments(job_id):
+        n = s["scene"] if s["scene"] is not None else 0
+        d = float(s["duration"] or 0)
+        slot = out.setdefault(n, {"start": t, "seconds": 0.0})
+        slot["seconds"] = round(slot["seconds"] + d, 3)
+        t += d
+    for slot in out.values():
+        slot["start"] = round(slot["start"], 3)
+    return out
+
+
 def public_job(job_id_or_row) -> dict | None:
     from server import db
 
@@ -47,16 +76,21 @@ def public_job(job_id_or_row) -> dict | None:
     if not row:
         return None
     jid = row["id"]
+    geo = _timeline(jid)
     return {
         "id": jid,
         "title": row["title"],
         "brief": row["brief"],
+        "project": _col(row, "project") or db.DEFAULT_PROJECT,
         "status": row["status"],
         "scenes": [
             {"n": s["n"], "status": s["status"], "ms": s["ms"],
-             "title": s["title"] or f"Scene {s['n']}", "path": s["path"]}
+             "title": s["title"] or f"Scene {s['n']}", "path": s["path"],
+             "seconds": geo.get(s["n"], {}).get("seconds"),
+             "start": geo.get(s["n"], {}).get("start")}
             for s in db.scenes(jid)
         ],
+        "lead_seconds": geo.get(0, {}).get("seconds") or 0.0,
         "scene_count": row["scene_count"],
         "created_at": row["created_at"],
         "created_at_iso": datetime.fromtimestamp(
@@ -76,6 +110,24 @@ def list_jobs() -> list[dict]:
 
     db.init()
     return [public_job(r) for r in db.all_jobs()]
+
+
+def list_projects() -> list[dict]:
+    from server import db
+
+    db.init()
+    return db.projects()
+
+
+def create_project(name: str) -> dict:
+    from server import db
+
+    db.init()
+    n = db.add_project(name)
+    for p in db.projects():
+        if p["name"] == n:
+            return p
+    return {"name": n, "created_at": db.now_ms(), "spots": 0}
 
 
 def get_job_detail(job_id: str) -> dict | None:
@@ -109,13 +161,14 @@ def get_job_detail(job_id: str) -> dict | None:
 
 
 # ------------------------------------------------------------------ crear + correr
-def create_job(brief: str, title: str | None = None, scenes: int | None = None) -> dict:
+def create_job(brief: str, title: str | None = None, scenes: int | None = None,
+               project: str | None = None) -> dict:
     from server import db, events
 
     db.init()
     jid = "j_" + secrets.token_hex(3)
     n = max(1, min(int(scenes or DEFAULT_SCENES), 6))
-    db.create_job(jid, brief, (title or brief)[:64], n)
+    db.create_job(jid, brief, (title or brief)[:64], n, project=project)
     events.publish("job_update", {"job_id": jid, "job": public_job(jid)})
     events.wake()   # el poller pasa de su intervalo de reposo al de job activo
     threading.Thread(target=_run_job_safe, args=(jid, brief, n), daemon=True,

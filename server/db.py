@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     id              TEXT PRIMARY KEY,
     title           TEXT,
     brief           TEXT,
+    project         TEXT,
     status          TEXT NOT NULL DEFAULT 'queued',
     scene_count     INTEGER NOT NULL DEFAULT 6,
     created_at      INTEGER NOT NULL,
@@ -104,7 +105,16 @@ CREATE TABLE IF NOT EXISTS chaos (
     dead     INTEGER NOT NULL DEFAULT 0,
     at       INTEGER NOT NULL
 );
+
+-- Un proyecto agrupa spots, como en cualquier suite de edicion. Existe como tabla
+-- propia para que un proyecto recien creado y todavia VACIO siga estando ahi.
+CREATE TABLE IF NOT EXISTS projects (
+    name       TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL
+);
 """
+
+DEFAULT_PROJECT = "Untitled Project"
 
 
 def conn() -> sqlite3.Connection:
@@ -127,7 +137,30 @@ def init() -> None:
             return
         conn().executescript(SCHEMA)
         conn().commit()
+        _migrate()
         _initialized = True
+
+
+def _migrate() -> None:
+    """Migraciones idempotentes. NUNCA pueden impedir el arranque.
+
+    La DB de produccion vive en un volumen y tiene datos: `CREATE TABLE IF NOT EXISTS`
+    no toca una tabla `jobs` que ya existe, asi que la columna `project` hay que
+    anadirla a mano y protegida — un segundo arranque tiene que ser un no-op.
+    """
+    try:
+        cols = {r["name"] for r in conn().execute("PRAGMA table_info(jobs)")}
+        if "project" not in cols:
+            conn().execute("ALTER TABLE jobs ADD COLUMN project TEXT")
+            conn().commit()
+        # Los spots que ya existian caen en el proyecto por defecto.
+        conn().execute("UPDATE jobs SET project=? WHERE project IS NULL OR project=''",
+                       (DEFAULT_PROJECT,))
+        conn().execute("INSERT OR IGNORE INTO projects(name,created_at) VALUES(?,?)",
+                       (DEFAULT_PROJECT, now_ms()))
+        conn().commit()
+    except Exception as e:      # noqa: BLE001 — una DB vieja no puede tumbar el server
+        print(f"[db] WARN migracion parcial: {e!r}")
 
 
 def now_ms() -> int:
@@ -150,10 +183,14 @@ def _exec(sql, args=()):
 
 
 # ------------------------------------------------------------------ jobs
-def create_job(job_id: str, brief: str, title: str, scene_count: int) -> dict:
+def create_job(job_id: str, brief: str, title: str, scene_count: int,
+               project: str | None = None) -> dict:
+    project = (project or DEFAULT_PROJECT).strip() or DEFAULT_PROJECT
+    add_project(project)
     _exec(
-        "INSERT INTO jobs(id,title,brief,status,scene_count,created_at) VALUES(?,?,?,?,?,?)",
-        (job_id, title, brief, "queued", scene_count, now_ms()),
+        "INSERT INTO jobs(id,title,brief,project,status,scene_count,created_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (job_id, title, brief, project, "queued", scene_count, now_ms()),
     )
     for n in range(1, scene_count + 1):
         _exec("INSERT OR IGNORE INTO scenes(job_id,n,status) VALUES(?,?,'pending')", (job_id, n))
@@ -178,6 +215,28 @@ def update_job(job_id: str, **fields) -> dict | None:
 
 def set_status(job_id: str, status: str, **fields) -> dict | None:
     return update_job(job_id, status=status, **fields)
+
+
+# ------------------------------------------------------------------ projects
+def add_project(name: str) -> str:
+    name = (name or "").strip() or DEFAULT_PROJECT
+    _exec("INSERT OR IGNORE INTO projects(name,created_at) VALUES(?,?)", (name, now_ms()))
+    return name
+
+
+def projects() -> list[dict]:
+    """Los proyectos declarados MAS los que solo viven en la columna de jobs.
+
+    La union importa: una DB migrada tiene jobs con proyecto y la tabla vacia.
+    """
+    rows = {r["name"]: r["created_at"] for r in _rows("SELECT name,created_at FROM projects")}
+    for r in _rows("SELECT DISTINCT project FROM jobs WHERE project IS NOT NULL AND project<>''"):
+        rows.setdefault(r["project"], 0)
+    counts = {r["project"]: r["c"] for r in
+              _rows("SELECT project, COUNT(*) AS c FROM jobs GROUP BY project")}
+    out = [{"name": n, "created_at": at, "spots": counts.get(n, 0)} for n, at in rows.items()]
+    out.sort(key=lambda p: (-p["spots"], p["name"].lower()))
+    return out
 
 
 # ------------------------------------------------------------------ scenes
@@ -304,9 +363,20 @@ def demo() -> None:
     _initialized = False
     init()
 
-    j = create_job("j_test", "brief de prueba", "T", 3)
+    j = create_job("j_test", "brief de prueba", "T", 3, project="Nike Q3")
     assert j["status"] == "queued" and j["scene_count"] == 3
+    assert j["project"] == "Nike Q3"
     assert len(scenes("j_test")) == 3
+
+    # el proyecto por defecto existe siempre; el declarado aparece con su cuenta
+    names = {p["name"]: p["spots"] for p in projects()}
+    assert names["Nike Q3"] == 1 and DEFAULT_PROJECT in names
+    add_project("Vacio")
+    assert {p["name"]: p["spots"] for p in projects()}["Vacio"] == 0
+
+    # la migracion es idempotente: correrla otra vez no toca nada
+    _migrate()
+    assert get_job("j_test")["project"] == "Nike Q3"
 
     update_scene("j_test", 2, status="ready", ms=1234)
     assert scenes("j_test")[1]["ms"] == 1234
