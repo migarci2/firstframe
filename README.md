@@ -207,7 +207,7 @@ Note that the server key deliberately lacks `writeKeys` — `make_keys.py` is a 
 script that runs with the master key and then steps aside
 ([`infra/make_keys.py#L177-L203`](infra/make_keys.py#L177-L203)).
 
-### HLS served out of the bucket, segment by segment
+### Every HLS segment lands in the bucket as ffmpeg closes it
 
 [`server/assembler.py#L208-L293`](server/assembler.py#L208-L293) ·
 [`server/assembler.py#L174-L205`](server/assembler.py#L174-L205) ·

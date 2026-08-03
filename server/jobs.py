@@ -435,7 +435,7 @@ def _call_runner(runner, job_id: str, brief: str, scene_count: int, on_scene, on
             d.setdefault("model", d.get("from"))
             d.setdefault("fallback_model", d.get("to"))
             d.setdefault("provider", "gmicloud")
-            d["detail"] = (f"{d.get('role', 'clip')}: MODEL_ERROR en {d.get('model')} "
+            d["detail"] = (f"{d.get('role', 'clip')}: MODEL_ERROR on {d.get('model')} "
                            f"-> {d.get('fallback_model')}")
         d.setdefault("detail", d.get("path") or d.get("model") or "")
         if kind in ("scene_started", "scene_ready", "job_started", "job_complete"):
@@ -695,7 +695,7 @@ def _refine_scene(job_id: str, n: int, note: str | None, take: int) -> Path:
               f"cayendo al clip de ffmpeg")
     out = WORK / job_id / f"scene-{n}-take{take}.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
-    txt = (note or "refinado").replace("'", "").replace(":", " ")[:40]
+    txt = (note or "refined take").replace("'", "").replace(":", " ")[:40]
     subprocess.run([
         "ffmpeg", "-loglevel", "error", "-y",
         "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=24:duration=6",
@@ -833,7 +833,7 @@ def verify(job_id: str) -> dict | None:
         report = m.verification_report()
         lines = [
             f"file:            {final.name} ({final.stat().st_size:,} bytes)",
-            f"manifest:        embebido en la caja uuid de genblaze",
+            f"manifest:        embedded in the genblaze uuid box",
             f"schema_version:  {m.schema_version}",
             f"run_id:          {m.run.run_id}",
             f"canonical_hash:  {m.canonical_hash or m.compute_hash()}",

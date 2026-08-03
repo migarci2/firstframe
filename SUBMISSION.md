@@ -18,7 +18,7 @@ A review room for generative video built on Backblaze B2 and Genblaze.
 Generative video takes minutes to render, and the reviewer only finds out the shot is
 wrong after paying for all of it. FirstFrame segments each scene into HLS and publishes it
 to B2 the moment it exists, so playback starts on scene 1 instead of scene N — first frame
-at 5.4 s against 22.8 s for the full render, a 4.2× gap, measured. Reject in the first
+at 9.3 s against 65.7 s for the full render, a 7.1× gap, measured. Reject in the first
 seconds and a vision judge inside a Genblaze `AgentLoop` refines and relaunches the scene;
 approve and the master lands in `approved/` with Object Lock GOVERNANCE for 30 days,
 manifest embedded in the MP4 and verifiable.
@@ -151,8 +151,8 @@ every re-render returns a different image.
 
 ## Accomplishments
 
-- **The number is real and the app measures it itself.** 5.4 s to first frame vs 22.8 s
-  full render, 4.2×, recorded in the app's own database.
+- **The number is real and the app measures it itself.** 9.3 s to first frame vs 65.7 s
+  full render, 7.1×, recorded in the app's own database.
 - **Object Lock that is actually proven.** Not "we mention Object Lock" — the self-checks
   upload, read the retention back, and assert that B2 rejects deleting the locked version.
   Including the subtlety that a `delete_object` *without* a `VersionId` only writes a hide
@@ -416,9 +416,7 @@ Stated here because a judge with repo access should read it from us.
   triggering another iteration and another 30 s, pushing first frame to ~70 s. The judge is
   real and wired into a real `AgentLoop`; for a live demo it is switched off from the
   environment (`JUDGE_THRESHOLD=0`), not removed from the code.
-- **The UI is in Spanish.** The code, the API and the documentation are in English.
-
----
+- ---
 
 ## Built with
 

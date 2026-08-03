@@ -2012,7 +2012,7 @@ function handleEvent(type, d) {
                (d.model || '?') + ' → ' + (d.fallback_model || '?') + (d.scene ? ' · scene ' + d.scene : ''),
                'one generator failed, another took over — no work lost');
       if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene,
-                               reason: (d.model || '?') + ' MODEL_ERROR en ' + (d.provider || '?'),
+                               reason: (d.model || '?') + ' MODEL_ERROR on ' + (d.provider || '?'),
                                action: 'fallback → ' + (d.fallback_model || '?') });
       return;
 

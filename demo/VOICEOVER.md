@@ -24,7 +24,7 @@ I approve. The master is concatenated, the provenance manifest is embedded insid
 
 ## 6 · Architecture and close (2:18–3:00)
 
-All of this rests on two things. B2: incremental HLS served from the bucket segment by segment, Event Notifications signed with HMAC, Object Lock in GOVERNANCE mode that lifecycle rules cannot touch, daysFromStartingToCancelingUnfinishedLargeFiles so a dead render never leaves an orphaned multipart, and read-only application keys so an outside reviewer never holds a key that can write. And Genblaze: a pipeline per scene with fallback_models, an AgentLoop with an Evaluator and a real vision judge, FFmpeg fan-in, manifest_lock, ObjectStorageSink and replay. We also left three pull requests and an issue open on the Genblaze repo, for the bugs we hit building this.
+All of this rests on two things. B2: every HLS segment uploaded to the bucket the moment ffmpeg closes it, Event Notifications signed with HMAC, Object Lock in GOVERNANCE mode that lifecycle rules cannot touch, daysFromStartingToCancelingUnfinishedLargeFiles so a dead render never leaves an orphaned multipart, and read-only application keys so an outside reviewer never holds a key that can write. And Genblaze: a pipeline per scene with fallback_models, an AgentLoop with an Evaluator and a real vision judge, FFmpeg fan-in, manifest_lock, ObjectStorageSink and replay. We also left three pull requests and an issue open on the Genblaze repo, for the bugs we hit building this.
 
 ---
 
