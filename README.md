@@ -37,11 +37,10 @@ so playback starts on scene 1 instead of on scene N.
 
 Job `j_47cdc2`, 6 scenes, recorded by the app itself and **still live on the deployed
 instance** — open the review room and check it (`first_frame_ms=9303`,
-`total_render_ms=65652`). Across the six runs of the real
-pipeline still in that database, the first frame lands between **5.4 s and 10.9 s**
-against **22.8 s to 36.5 s** of full render — a 2.5× to 4.5× gap. Those runs used
-`DEMO_MODE=mock` with the vision judge off (`JUDGE_THRESHOLD=0`); see
-[Honest limitations](#honest-limitations). The gap is a property of the architecture, not
+`total_render_ms=65652`). Across the runs still in that database the first frame lands between **5.4 s and
+11.2 s** against **22.8 s and 102.3 s** of full render — a **3.1× to 11.1×** gap,
+widening with scene count. All of them ran with the vision judge off
+(`JUDGE_THRESHOLD=0`); see [Honest limitations](#honest-limitations). The gap is a property of the architecture, not
 of the provider: with real providers both numbers grow and the ratio grows with them,
 because the denominator is "all N scenes" and the numerator is always "one segment".
 
