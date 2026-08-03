@@ -439,7 +439,7 @@ h1, h2, h3, .display {
   letter-spacing: .004em;
   color: var(--ink);
 }
-.tbl td b { color: var(--amber); font-weight: 600; }
+.tbl td b { color: var(--ink); font-weight: 600; }
 
 @media (max-width: 760px) {
   .tbl thead { display: none; }
