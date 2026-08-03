@@ -8,6 +8,18 @@ one on screen in seconds and keeps generating behind it.
 
 Backblaze Generative Media Hackathon · Genblaze 0.4.5 + Backblaze B2.
 
+## Try it
+
+| | |
+|---|---|
+| **Review room** | **https://firstframe.migarci2.dev** — access code **`FIRSTFRAME`** |
+| **Marketing page** | https://firstframe.migarci2.dev/landing.html — public, no code |
+
+The room sits behind a short access code so the demo behaves like the real product.
+After the code you land on the projects view, with a project already in progress and a
+spot approved and sealed under Object Lock. Creating a new spot costs nothing: the
+instance runs `GEN_MODE=free` against a warm keyframe corpus.
+
 ---
 
 ## The number

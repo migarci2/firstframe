@@ -429,13 +429,20 @@ Stated here because a judge with repo access should read it from us.
 ## Links
 
 - **Repo:** https://github.com/migarci2/genblaze-hackathon
-- **Live URL:** _pending deploy_
+- **Live URL:** https://firstframe.migarci2.dev
+- **Demo access code:** `FIRSTFRAME`
 - **Video:** _pending_
+
+> The review room sits behind a short access code so the demo behaves like the real
+> product. Judges: open https://firstframe.migarci2.dev, enter `FIRSTFRAME`, and you
+> land on the projects view with a project already in progress. The marketing page at
+> https://firstframe.migarci2.dev/landing.html is public and needs no code.
 
 ## Submission checklist
 
-- [ ] Live URL with no login wall, preloaded data, and a "New spot" button that costs the
-      judges nothing (`DEMO_MODE=mock`, or `free` with a warm keyframe corpus). Tested from incognito.
+- [x] Live URL with preloaded data and a "New spot" button that costs the judges nothing
+      (`GEN_MODE=free` with a warm keyframe corpus). Access code `FIRSTFRAME`, stated
+      above and in the README. Tested from incognito.
 - [ ] Video ≤3 min, unlisted, with the on-screen numbers and the failover on camera.
 - [ ] Repo public, or `b2genblaze` invited if private.
 - [x] README with explicit "How we use B2" and "How we use Genblaze" sections, feature by
