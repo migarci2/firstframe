@@ -1,0 +1,56 @@
+[
+  {
+    "id": 1,
+    "title": "The problem",
+    "clip": null,
+    "vo": null,
+    "clipSeconds": 0,
+    "voSeconds": 0,
+    "seconds": 3
+  },
+  {
+    "id": 2,
+    "title": "First frame",
+    "clip": null,
+    "vo": null,
+    "clipSeconds": 0,
+    "voSeconds": 0,
+    "seconds": 3
+  },
+  {
+    "id": 3,
+    "title": "Reject mid-render",
+    "clip": null,
+    "vo": null,
+    "clipSeconds": 0,
+    "voSeconds": 0,
+    "seconds": 3
+  },
+  {
+    "id": 4,
+    "title": "Failover on camera",
+    "clip": null,
+    "vo": null,
+    "clipSeconds": 0,
+    "voSeconds": 0,
+    "seconds": 3
+  },
+  {
+    "id": 5,
+    "title": "Approve and provenance",
+    "clip": null,
+    "vo": null,
+    "clipSeconds": 0,
+    "voSeconds": 0,
+    "seconds": 3
+  },
+  {
+    "id": 6,
+    "title": "Architecture",
+    "clip": null,
+    "vo": null,
+    "clipSeconds": 0,
+    "voSeconds": 0,
+    "seconds": 3
+  }
+]
