@@ -13,3 +13,5 @@ runs/
 .cache/
 .gstack/
 data/posters/
+ad/node_modules/
+ad/out/
