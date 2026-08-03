@@ -290,8 +290,14 @@ button { cursor: pointer; }
 
 /* El bloque del spot es lo segundo que se lee después del plano, así que tiene
  * saltos de verdad: kicker 11 → titular 30 → frase 17 → metadatos 11,5. */
-.stagebar { display: flex; align-items: center; gap: clamp(24px, 4vw, 56px); padding-top: 30px; }
-.stageinfo { min-width: 0; flex: 1; }
+/* Con el raíl abierto en un portátil de 1280 el bloque se queda sin sitio y el
+   titular se parte en tres. Antes de eso, los botones bajan a su propia fila. */
+.stagebar {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 20px clamp(24px, 4vw, 56px);
+  padding-top: 30px;
+}
+.stageinfo { min-width: min(100%, 420px); flex: 1; }
 
 .stagekicker {
   margin: 0 0 12px;
