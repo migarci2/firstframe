@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FFEditor — timeline editable</title>
+<link rel="stylesheet" href="ffeditor.css">
+<style>
+  /* Sólo lo de esta página de prueba. El editor trae su propio CSS y hereda
+     los tokens de styles.css cuando se monta dentro de la sala. */
+  :root {
+    --canvas: #08090a; --card: #0c0d0f; --recessed: #111214;
+    --white: #f4f4f5; --ash: #9ba1a8; --smoke: #6b7178; --iron: #454647;
+    --border: rgba(255,255,255,.09); --border-2: rgba(255,255,255,.055);
+    --coral: #ff6b5e; --bad: #ff4d4d; --ok: #59d499; --info: #56c2ff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 24px 40px;
+    background: var(--canvas); color: var(--white);
+    font: 400 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  h1 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 4px; }
+  .sub { color: var(--smoke); font-size: 12.5px; margin: 0 0 22px; }
+  .sub code { font-family: var(--mono); font-size: 11.5px; color: var(--ash); }
+
+  .panel {
+    background: var(--card);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px var(--border);
+    margin-bottom: 16px;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border-2);
+  }
+  .panel-name {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: .16em;
+    color: var(--smoke);
+  }
+  .panel-body { padding: 12px 16px 14px; }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row .sp { flex: 1 1 auto; }
+  button.d {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: .1em;
+    color: var(--ash); background: var(--recessed);
+    border: 0; box-shadow: inset 0 0 0 1px var(--border);
+    border-radius: 4px; padding: 6px 11px; cursor: pointer;
+  }
+  button.d:hover { background: #1d1e22; color: var(--white); }
+
+  pre#out {
+    margin: 0; padding: 12px 14px;
+    background: #0a0b0c; border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--border-2);
+    font-family: var(--mono); font-size: 11px; line-height: 1.65;
+    color: var(--ash);
+    max-height: 260px; overflow: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .log-t { color: var(--iron); }
+  .log-k { color: var(--coral); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+  .stat {
+    padding: 10px 12px; border-radius: 6px;
+    background: var(--recessed); box-shadow: inset 0 0 0 1px var(--border-2);
+  }
+  .stat b { display: block; font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--white); }
+  .stat span { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; color: var(--iron); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>FFEditor — the timeline you can actually edit</h1>
+  <p class="sub">
+    Standalone harness. No backend, no build step.
+    Drag a clip to reorder, drag its edges to trim, click the coloured dot to drop a scene from the cut.
+    Mount point: <code>FFEditor.mount(el, {jobId, scenes, onChange})</code>
+  </p>
+
+  <!-- El panel imita al TIMELINE de la sala para que se vea igual encajado. -->
+  <section class="panel">
+    <div class="panel-head">
+      <span class="panel-name">Timeline</span>
+      <span class="panel-name" id="hd" style="margin-left:auto"></span>
+    </div>
+    <div class="panel-body">
+      <div id="editor"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="panel-name">Cut</span></div>
+    <div class="panel-body">
+      <div class="grid" id="stats"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <span class="panel-name">Harness</span>
+    </div>
+    <div class="panel-body">
+      <div class="row" style="margin-bottom:12px">
+        <button class="d" id="b-play">Play playhead</button>
+        <button class="d" id="b-render">Scene 5 finishes rendering</button>
+        <button class="d" id="b-add">Pipeline adds scene 7</button>
+        <button class="d" id="b-edl">Dump EDL</button>
+        <span class="sp"></span>
+        <button class="d" id="b-clear">Clear log</button>
+      </div>
+      <pre id="out"></pre>
+    </div>
+  </section>
+
+</div>
+
+<script src="../vendor/Sortable.min.js"></script>
+<script src="ffeditor.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // Datos de ejemplo con la misma forma que devuelve /api/jobs/{id}: escenas
+  // listas con duración real, una renderizando y una pendiente, para que se
+  // vea cómo se comporta el editor con el pipeline a medias.
+  var scenes = [
+    { n: 1, title: 'Cold open — city at dawn', status: 'ready',     seconds: 5.2,  start: 0 },
+    { n: 2, title: 'Product in hand',          status: 'ready',     seconds: 7.8,  start: 5.2 },
+    { n: 3, title: 'Close-up, the click',      status: 'ready',     seconds: 3.1,  start: 13.0 },
+    { n: 4, title: 'Team reacting',            status: 'ready',     seconds: 6.4,  start: 16.1 },
+    { n: 5, title: 'Wide shot, rooftop',       status: 'rendering', seconds: null, start: null },
+    { n: 6, title: 'Logo lockup',              status: 'pending',   seconds: null, start: null }
+  ];
+
+  var out = document.getElementById('out');
+  function log(kind, msg) {
+    var t = new Date().toTimeString().slice(0, 8);
+    var line = document.createElement('div');
+    var a = document.createElement('span'); a.className = 'log-t'; a.textContent = t + '  ';
+    var b = document.createElement('span'); b.className = 'log-k'; b.textContent = kind;
+    line.appendChild(a); line.appendChild(b);
+    line.appendChild(document.createTextNode('  ' + msg));
+    out.appendChild(line);
+    out.scrollTop = out.scrollHeight;
+  }
+
+  function fmt(s) {
+    s = Math.max(0, s || 0);
+    var m = Math.floor(s / 60), r = s - m * 60;
+    return m + ':' + (r < 10 ? '0' : '') + (Math.round(r * 10) / 10).toFixed(1).replace(/\.0$/, '');
+  }
+
+  var ed = FFEditor.mount(document.getElementById('editor'), {
+    scenes: scenes,
+    persist: false,                 // demo autónoma: sin backend
+    onChange: function (edl, meta) {
+      log(meta.kind, 'scene ' + (meta.scene == null ? '—' : meta.scene) +
+          ' · cut is now ' + fmt(meta.duration) +
+          ' · order [' + edl.map(function (e) { return e.n; }).join(' ') + ']');
+      stats();
+    },
+    onSeek: function (scene, t) {
+      log('seek', 'scene ' + scene.n + ' starts at ' + fmt(t) + ' in the cut');
+    }
+  });
+
+  function stats() {
+    var edl = ed.getEDL();
+    var on  = edl.filter(function (e) { return e.enabled; });
+    var trimmed = edl.filter(function (e) {
+      var s = scenes.filter(function (x) { return x.n === e.n; })[0];
+      return e.in > 0.01 || FFEditor.srcSeconds(s) - FFEditor.outOf(e, s) > 0.01;
+    });
+    var host = document.getElementById('stats');
+    host.textContent = '';
+    [['Cut duration', fmt(ed.duration())],
+     ['Clips in cut', on.length + ' / ' + edl.length],
+     ['Trimmed', String(trimmed.length)],
+     ['Order', edl.map(function (e) { return e.n; }).join(' → ')]
+    ].forEach(function (p) {
+      var d = document.createElement('div'); d.className = 'stat';
+      var b = document.createElement('b'); b.textContent = p[1];
+      var s = document.createElement('span'); s.textContent = p[0];
+      d.appendChild(b); d.appendChild(s); host.appendChild(d);
+    });
+    document.getElementById('hd').textContent = fmt(ed.duration());
+  }
+
+  // Playhead simulado — así se ve que sigue el montaje editado, no el original.
+  var playing = false, t = 0, raf = null, last = 0;
+  document.getElementById('b-play').addEventListener('click', function () {
+    playing = !playing;
+    this.textContent = playing ? 'Pause playhead' : 'Play playhead';
+    if (!playing) { cancelAnimationFrame(raf); return; }
+    last = performance.now();
+    (function loop(now) {
+      if (!playing) return;
+      t += (now - last) / 1000; last = now;
+      if (t > ed.duration()) t = 0;
+      ed.setPlayhead(t);
+      raf = requestAnimationFrame(loop);
+    })(last);
+  });
+
+  document.getElementById('b-render').addEventListener('click', function () {
+    var s = scenes.filter(function (x) { return x.n === 5; })[0];
+    if (!s || s.status === 'ready') { log('pipeline', 'scene 5 was already ready'); return; }
+    s.status = 'ready'; s.seconds = 8.6;
+    ed.setScenes(scenes);
+    log('pipeline', 'scene 5 landed at 8.6s — the edit survived, order untouched');
+    stats();
+  });
+
+  document.getElementById('b-add').addEventListener('click', function () {
+    if (scenes.some(function (x) { return x.n === 7; })) { log('pipeline', 'scene 7 already exists'); return; }
+    scenes.push({ n: 7, title: 'Tagline card', status: 'ready', seconds: 4.0, start: null });
+    ed.setScenes(scenes);
+    log('pipeline', 'scene 7 appeared and was appended to the cut');
+    stats();
+  });
+
+  document.getElementById('b-edl').addEventListener('click', function () {
+    log('edl', JSON.stringify(ed.getEDL()));
+  });
+  document.getElementById('b-clear').addEventListener('click', function () {
+    out.textContent = '';
+  });
+
+  stats();
+  log('ready', 'FFEditor ' + FFEditor.version + ' · Sortable ' +
+      (window.Sortable ? window.Sortable.version : 'MISSING') + ' · ' + scenes.length + ' scenes');
+})();
+</script>
+</body>
+</html>

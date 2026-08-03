@@ -1,0 +1,288 @@
+/* FFEditor — hereda los tokens de styles.css cuando se monta dentro de la sala,
+ * y trae fallbacks para poder abrir demo.html sin nada más. */
+
+.ffed {
+  --ffed-canvas:   var(--card,     #0c0d0f);
+  --ffed-recessed: var(--recessed, #111214);
+  --ffed-white:    var(--white,    #f4f4f5);
+  --ffed-ash:      var(--ash,      #9ba1a8);
+  --ffed-smoke:    var(--smoke,    #6b7178);
+  --ffed-iron:     var(--iron,     #454647);
+  --ffed-border:   var(--border,   rgba(255,255,255,.09));
+  --ffed-border-2: var(--border-2, rgba(255,255,255,.055));
+  --ffed-coral:    var(--coral,    #ff6b5e);
+  --ffed-info:     var(--info,     #56c2ff);
+  --ffed-bad:      var(--bad,      #ff4d4d);
+  --ffed-mono:     var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+
+  display: block;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ─────────────────────────── barra superior ─────────────────────────── */
+
+.ffed-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+  min-height: 24px;
+}
+.ffed-grow { flex: 1 1 auto; }
+
+.ffed-status {
+  font-family: var(--ffed-mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--ffed-smoke);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ffed-status.is-dirty { color: var(--ffed-coral); }
+
+.ffed-btn {
+  font: inherit;
+  font-family: var(--ffed-mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ffed-ash);
+  background: var(--ffed-recessed);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--ffed-border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background .15s, color .15s, box-shadow .15s;
+}
+.ffed-btn:hover { background: #1d1e22; color: var(--ffed-white); }
+.ffed-btn:focus-visible { outline: 2px solid var(--ffed-coral); outline-offset: 2px; }
+.ffed-btn[disabled] { opacity: .5; cursor: default; }
+
+.ffed-btn-key {
+  color: var(--ffed-white);
+  box-shadow: inset 0 0 0 1px rgba(255,107,94,.45);
+}
+.ffed-btn-key:hover { background: rgba(255,107,94,.14); }
+
+/* ───────────────────────────── regla + pista ───────────────────────────── */
+
+.ffed-stage { position: relative; }
+
+.ffed-ruler {
+  position: relative; height: 15px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--ffed-border-2);
+}
+.ffed-tick {
+  position: absolute; bottom: 0;
+  border-left: 1px solid var(--ffed-border);
+  height: 5px;
+}
+.ffed-tick.lab { height: 15px; border-left-color: rgba(255,255,255,.14); }
+.ffed-tick > span {
+  position: absolute; left: 4px; top: -1px;
+  font-family: var(--ffed-mono); font-size: 9px; letter-spacing: .06em;
+  color: var(--ffed-iron); white-space: nowrap;
+}
+
+.ffed-track {
+  display: flex; gap: 2px;
+  height: 58px;
+  align-items: stretch;
+}
+
+.ffed-empty {
+  height: 58px; display: flex; align-items: center;
+  font-family: var(--ffed-mono); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: .12em;
+  color: var(--ffed-iron);
+}
+
+/* ───────────────────────────────── clips ───────────────────────────────── */
+
+.ffed-clip {
+  position: relative;
+  min-width: 26px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--ffed-recessed);
+  box-shadow: inset 0 0 0 1px var(--ffed-border-2);
+  cursor: grab;
+  transition: background .15s, box-shadow .15s, opacity .15s;
+}
+.ffed-clip:active { cursor: grabbing; }
+.ffed-clip:focus-visible { outline: 2px solid var(--ffed-coral); outline-offset: -2px; }
+
+.ffed-body {
+  height: 100%;
+  padding: 7px 9px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  min-width: 0;
+  pointer-events: none;      /* el arrastre lo captura el clip, no su contenido */
+}
+.ffed-body > * { pointer-events: none; }
+.ffed-dot { pointer-events: auto; }
+
+.ffed-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+.ffed-name {
+  font-size: 11.5px; font-weight: 500; letter-spacing: -.005em;
+  color: var(--ffed-ash);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ffed-foot { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ffed-len {
+  font-family: var(--ffed-mono); font-size: 9px;
+  text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ffed-iron);
+  white-space: nowrap;
+}
+.ffed-badge {
+  font-family: var(--ffed-mono); font-size: 8px;
+  text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ffed-smoke);
+  border: 1px solid var(--ffed-border);
+  border-radius: 2px;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+
+/* El punto de estado hace de interruptor: incluir / saltar la escena. */
+.ffed-dot {
+  flex: 0 0 auto;
+  width: 7px; height: 7px; padding: 0;
+  border: 0; border-radius: 50%;
+  background: var(--ffed-iron);
+  cursor: pointer;
+  transition: background .15s, transform .15s, box-shadow .15s;
+}
+.ffed-dot:hover { transform: scale(1.4); }
+.ffed-dot:focus-visible { outline: 2px solid var(--ffed-coral); outline-offset: 2px; }
+
+/* Estados heredados del pipeline — mismo lenguaje que .tl-clip en styles.css. */
+.ffed-clip.s-ready {
+  background: #16171a;
+  box-shadow: inset 0 0 0 1px var(--ffed-border), inset 3px 0 0 0 var(--ffed-coral);
+}
+.ffed-clip.s-ready .ffed-body { padding-left: 12px; }
+.ffed-clip.s-ready .ffed-name { color: var(--ffed-white); }
+.ffed-clip.s-ready .ffed-len  { color: var(--ffed-smoke); }
+.ffed-clip.s-ready:hover { background: #1d1e22; }
+.ffed-clip.s-ready .ffed-dot { background: var(--ffed-coral); }
+
+.ffed-clip.s-rendering {
+  background: #131519;
+  box-shadow: inset 0 0 0 1px var(--ffed-border), inset 3px 0 0 0 var(--ffed-info);
+}
+.ffed-clip.s-rendering .ffed-body { padding-left: 12px; }
+.ffed-clip.s-rendering .ffed-dot { background: var(--ffed-info); }
+.ffed-clip.s-rendering .ffed-badge { color: var(--ffed-info); }
+
+.ffed-clip.s-pending {
+  background: repeating-linear-gradient(-45deg,
+    rgba(255,255,255,.022) 0 6px, transparent 6px 12px);
+  box-shadow: inset 0 0 0 1px var(--ffed-border-2);
+}
+.ffed-clip.s-failed {
+  box-shadow: inset 0 0 0 1px rgba(255,77,77,.35), inset 3px 0 0 0 var(--ffed-bad);
+}
+.ffed-clip.s-failed .ffed-body { padding-left: 12px; }
+.ffed-clip.s-failed .ffed-dot { background: var(--ffed-bad); }
+.ffed-clip.s-failed .ffed-badge { color: var(--ffed-bad); }
+
+/* Recortado: cuatro marcas de perforación en el borde, como una tira de cine
+ * cortada. Se ve de un vistazo qué clips has tocado. */
+.ffed-clip.is-trimmed::after {
+  content: "";
+  position: absolute; top: 0; right: 0; bottom: 0; width: 5px;
+  background: repeating-linear-gradient(180deg,
+    var(--ffed-coral) 0 3px, transparent 3px 8px);
+  opacity: .55;
+  pointer-events: none;
+}
+
+/* Saltada: sigue en la pista, pero fuera del montaje. */
+.ffed-clip.is-off {
+  opacity: .34;
+  box-shadow: inset 0 0 0 1px var(--ffed-border-2);
+  background: var(--ffed-recessed);
+}
+.ffed-clip.is-off .ffed-name { text-decoration: line-through; color: var(--ffed-iron); }
+.ffed-clip.is-off .ffed-dot  { background: transparent; box-shadow: inset 0 0 0 1px var(--ffed-iron); }
+
+.ffed-clip.is-sel {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.3), inset 3px 0 0 0 var(--ffed-coral);
+}
+.ffed-clip.is-sel .ffed-body { padding-left: 12px; }
+
+/* ──────────────────────────── asas de recorte ──────────────────────────── */
+
+.ffed-h {
+  position: absolute; top: 0; bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+  z-index: 3;
+  touch-action: none;      /* sin esto el navegador se queda el gesto en táctil */
+}
+.ffed-h-l { left: 0; }
+.ffed-h-r { right: 0; }
+
+.ffed-h::before {
+  content: "";
+  position: absolute; top: 50%; transform: translateY(-50%);
+  left: 3px;
+  width: 3px; height: 18px;
+  border-radius: 2px;
+  background: var(--ffed-white);
+  opacity: 0;
+  transition: opacity .12s;
+}
+.ffed-clip:hover .ffed-h::before { opacity: .32; }
+.ffed-h:hover::before { opacity: .95; }
+
+/* Mientras se recorta, nada de transiciones: el clip tiene que seguir al ratón
+ * al milímetro o la sensación es de goma. */
+.ffed.ffed-trimming .ffed-clip { transition: none; cursor: ew-resize; }
+.ffed.ffed-trimming { cursor: ew-resize; }
+
+/* ─────────────────────────── arrastre (Sortable) ─────────────────────────── */
+
+.ffed-ghost {
+  opacity: .3;
+  background: rgba(255,107,94,.12) !important;
+  box-shadow: inset 0 0 0 1px var(--ffed-coral) !important;
+}
+.ffed-ghost .ffed-body { opacity: 0; }
+
+.ffed-chosen { z-index: 5; }
+
+.ffed-drag {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 12px 28px rgba(0,0,0,.6) !important;
+  cursor: grabbing !important;
+  opacity: .95;
+}
+.ffed.ffed-reordering .ffed-h { pointer-events: none; }
+
+/* ─────────────────────────────── playhead ─────────────────────────────── */
+
+.ffed-head {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: var(--ffed-coral);
+  pointer-events: none;
+  z-index: 4;
+}
+.ffed-head::before {
+  content: ""; position: absolute; top: 0; left: -4px;
+  border-left: 4.5px solid transparent; border-right: 4.5px solid transparent;
+  border-top: 6px solid var(--ffed-coral);
+}
+
+/* ─────────────────────────────── ayuda ─────────────────────────────── */
+
+.ffed-hint {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  margin-top: 8px;
+  font-family: var(--ffed-mono);
+  font-size: 9px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ffed-iron);
+}
+.ffed-warn { color: var(--ffed-bad); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ffed-clip, .ffed-btn, .ffed-dot { transition: none; }
+}
