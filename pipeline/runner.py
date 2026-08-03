@@ -71,13 +71,14 @@ DEFAULT_SECONDS = 4.0
 # — pero en free es la diferencia entre un spot y una demo de IA cutre.
 _BEATS: list[tuple[str, str, str, str]] = [
     ("apertura",
-     "wide establishing shot of the space where the product lives, product small "
-     "in frame on a clean surface, generous negative space, no people",
+     "wide establishing shot, the product standing on a clean surface in a "
+     "minimal space, clearly visible in the centre of the frame, generous "
+     "negative space around it, no people",
      "{brief_short}",
      "slow push-in towards the product"),
     ("detalle",
-     "macro shot of the product surface, material and texture, dramatic side "
-     "light, seamless backdrop",
+     "close-up of the product itself filling the frame, its material, finish and "
+     "surface detail razor sharp, dramatic side light, seamless backdrop",
      "Cada detalle cuenta.",
      "slow drift across the surface, shallow depth of field"),
     ("contexto",
@@ -107,19 +108,29 @@ _BEATS: list[tuple[str, str, str, str]] = [
 # memoria entre llamadas no lo hace solo: si no le atas paleta, luz y
 # tratamiento, salen tres anuncios de tres marcas distintas. Esto es lo unico
 # que comparten los tres prompts, y es lo que da continuidad visual.
+#
+# Cortas a proposito (~12 palabras): con el ancla larga de la primera version,
+# el estilo se comia al sujeto y salian tres bodegones preciosos donde el
+# producto no se reconocia (verificado mirando los frames, no teorizando).
 _STYLE_ANCHORS: list[str] = [
-    "Consistent style across the whole spot: warm neutral palette of sand, cream "
-    "and terracotta, soft directional morning light, gentle haze, shallow depth "
-    "of field, fine 35mm film grain, minimal uncluttered set",
-    "Consistent style across the whole spot: cool monochrome palette of slate, "
-    "glass and steel blue, crisp studio light with clean edge shadows, polished "
-    "surfaces, high micro-contrast, modern uncluttered set",
-    "Consistent style across the whole spot: deep moody palette of forest green, "
-    "charcoal and amber, a single warm key light in darkness, volumetric haze, "
-    "glossy reflections, cinematic contrast",
-    "Consistent style across the whole spot: bright airy palette of white, pale "
-    "blue and soft pastel, diffused overcast daylight, pale seamless backdrop, "
-    "soft shadows, editorial minimalism",
+    "Warm neutral palette, soft morning light, shallow depth of field, 35mm film grain",
+    "Cool slate and glass palette, crisp studio light, polished surfaces, high contrast",
+    "Dark moody palette, single warm key light, volumetric haze, glossy reflections",
+    "Bright airy palette, diffused daylight, pale seamless backdrop, editorial minimalism",
+]
+
+# Pistas del brief -> ancla. Antes que el hash: si el brief ya dice "marmol
+# blanco, luz de manana", elegir por hash una paleta "slate azul" hace que el
+# ancla PELEE contra el brief y el resultado no se parece a lo que pidio nadie.
+_STYLE_CUES: list[tuple[int, tuple[str, ...]]] = [
+    (0, ("manana", "mañana", "morning", "calido", "cálido", "warm", "madera",
+         "wood", "dorado", "golden", "terracota", "arena", "sunset", "atardecer")),
+    (2, ("noche", "night", "oscuro", "dark", "negro", "black", "mojado", "wet",
+         "asfalto", "asphalt", "neon", "moody", "humo", "smoke")),
+    (1, ("acero", "steel", "metal", "cristal", "glass", "azul", "blue", "frio",
+         "frío", "tech", "urbano", "urban", "industrial")),
+    (3, ("blanco", "white", "claro", "pastel", "minimal", "limpio", "clean",
+         "marmol", "mármol", "seda", "algodon")),
 ]
 
 
@@ -128,9 +139,14 @@ def style_anchor(brief: str) -> str:
 
     Deterministica para que re-ejecutar el mismo job acierte en el cache (y no
     pague otros 45 s por imagen); distinta entre briefs para que dos spots
-    seguidos no salgan clonados en el video de la demo.
+    seguidos no salgan clonados en el video de la demo. Si el brief da pistas
+    de luz o paleta se respetan (ver `_STYLE_CUES`); si no dice nada, hash.
     """
-    h = int(hashlib.sha256(" ".join(brief.split()).lower().encode()).hexdigest()[:8], 16)
+    text = " ".join(brief.split()).lower()
+    for idx, cues in _STYLE_CUES:
+        if any(cue in text for cue in cues):
+            return _STYLE_ANCHORS[idx]
+    h = int(hashlib.sha256(text.encode()).hexdigest()[:8], 16)
     return _STYLE_ANCHORS[h % len(_STYLE_ANCHORS)]
 
 
@@ -175,6 +191,11 @@ def plan_scenes(brief: str, n: int = DEFAULT_SCENES, *,
     campo aparte: asi viaja gratis por `SceneRecord.spec`, y el refinado en
     caliente (`refine_scene`) reconstruye la escena con el mismo look sin tener
     que volver a calcularlo.
+
+    ORDEN DEL PROMPT: sujeto, luego plano, luego estilo. No es cosmetico — con
+    el sujeto en medio ("shot; subject: X") el generador real devolvia
+    habitaciones vacias preciosas SIN el producto. Los modelos de difusion
+    pesan mucho mas los primeros tokens: el producto va primero.
     """
     short = " ".join(brief.split())[:90]
     subject = short.rstrip(".")
@@ -185,7 +206,7 @@ def plan_scenes(brief: str, n: int = DEFAULT_SCENES, *,
         out.append(Scene(
             n=pos + 1,
             title=title,
-            keyframe_prompt=f"{shot}; subject: {subject}. {style}",
+            keyframe_prompt=f"{subject}. {shot}. {style}",
             voiceover=line.format(brief_short=short),
             clip_prompt=motion,
             seconds=seconds,
