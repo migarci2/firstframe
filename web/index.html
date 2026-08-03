@@ -8,11 +8,12 @@
      (?v=) y el documento pide no cachearse. -->
 <meta http-equiv="Cache-Control" content="no-store">
 <title>FirstFrame</title>
-<link rel="stylesheet" href="/styles.css?v=16">
+<link rel="stylesheet" href="/styles.css?v=17">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 </head>
-<body class="no-rail">
+<body>
 
+<!-- ─────────────── barra de programa: Proyecto — Spot ─────────────── -->
 <header class="top">
   <div class="wordmark">
     <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
@@ -25,97 +26,150 @@
     </svg>
     <span>FirstFrame</span>
   </div>
+  <div class="crumb">
+    <span class="crumb-p" id="crumb-project">—</span>
+    <span class="crumb-s" aria-hidden="true">—</span>
+    <span class="crumb-j" id="crumb-spot">no spot open</span>
+  </div>
   <span class="grow"></span>
-  <button class="linkbtn" id="btn-rail" type="button" aria-expanded="false">Run panel</button>
+  <button class="linkbtn" id="btn-rail" type="button" aria-expanded="true">Inspector</button>
   <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Technical details</button>
 </header>
 
 <div class="shell">
 
-  <!-- ─────────────── barra lateral: los spots ─────────────── -->
-  <aside class="side">
-    <button class="newbtn" id="btn-new" type="button">New spot</button>
-    <div class="side-label">Your spots</div>
-    <div class="joblist" id="joblist"></div>
+  <!-- ─────────────── PROJECT ─────────────── -->
+  <aside class="panel p-project">
+    <div class="panel-head">
+      <span class="panel-name">Project</span>
+      <button class="headbtn" id="btn-new-project" type="button" title="New project"
+              aria-label="New project">+</button>
+    </div>
+    <div class="panel-body">
+      <button class="newbtn" id="btn-new" type="button">New spot</button>
+      <form class="newproj" id="newproj" hidden>
+        <input id="newproj-name" type="text" placeholder="Project name" spellcheck="false"
+               maxlength="64" autocomplete="off">
+      </form>
+      <div class="tree" id="tree"></div>
+    </div>
   </aside>
 
-  <!-- ─────────────── escenario ─────────────── -->
-  <main class="main">
+  <!-- ─────────────── centro: MONITOR + TIMELINE ─────────────── -->
+  <div class="center">
 
-    <!-- paso 1: escribir el brief -->
-    <section class="compose" id="view-compose">
-      <h1>What should we make?</h1>
-      <p class="compose-sub">Describe it in plain words. You'll be watching it within seconds — no waiting for the render to finish.</p>
-      <textarea id="brief" rows="3" spellcheck="false"
-        placeholder="A 15-second spot for a running shoe. Dawn light, empty city, unhurried pace."></textarea>
-      <div class="compose-row">
-        <div class="seg" id="len-picker" role="group" aria-label="Length">
-          <button type="button" data-scenes="3">Short</button>
-          <button type="button" data-scenes="4" class="on">Medium</button>
-          <button type="button" data-scenes="6">Long</button>
+    <section class="panel p-monitor">
+      <div class="panel-head">
+        <span class="panel-name">Monitor</span>
+        <span class="panel-meta" id="mon-meta"></span>
+      </div>
+      <div class="panel-body monbody">
+
+        <!-- paso 1: escribir el brief -->
+        <section class="compose" id="view-compose">
+          <h1>What should we make?</h1>
+          <p class="compose-sub">Describe it in plain words. You'll be watching it within seconds — no waiting for the render to finish.</p>
+          <textarea id="brief" rows="3" spellcheck="false"
+            placeholder="A 15-second spot for a running shoe. Dawn light, empty city, unhurried pace."></textarea>
+          <div class="compose-row">
+            <label class="field">
+              <span>Project</span>
+              <select id="proj-picker"></select>
+            </label>
+            <label class="field">
+              <span>Length</span>
+              <div class="seg" id="len-picker" role="group" aria-label="Length">
+                <button type="button" data-scenes="3">Short</button>
+                <button type="button" data-scenes="4" class="on">Medium</button>
+                <button type="button" data-scenes="6">Long</button>
+              </div>
+            </label>
+            <span class="grow"></span>
+            <button class="primary big" id="btn-create" type="button">Create spot</button>
+          </div>
+        </section>
+
+        <!-- paso 2 y 3: verlo y decidir -->
+        <section class="spot" id="view-spot" hidden>
+          <div class="videostage">
+            <div class="videowrap">
+              <video id="player" playsinline muted controls></video>
+              <div class="chip" id="chip-live" hidden><i></i><span id="chip-live-text">Generating</span></div>
+              <div class="veil" id="veil" hidden><span id="veil-text">Preparing the first shot…</span></div>
+            </div>
+          </div>
+
+          <div class="stagebar">
+            <div class="stageinfo">
+              <p class="stagekicker" id="spot-kicker"></p>
+              <h2 id="spot-title">—</h2>
+              <p class="say" id="spot-line">—</p>
+            </div>
+            <div class="stageact" id="stage-actions"></div>
+          </div>
+        </section>
+
+        <!-- pedir cambios: sobre el monitor, como un popover de herramienta -->
+        <div class="changes" id="changes" hidden>
+          <label for="note">What would you change?</label>
+          <textarea id="note" rows="2" spellcheck="false"
+            placeholder="The logo is hard to read in the close-up."></textarea>
+          <div class="changes-row">
+            <label class="pick">Apply to
+              <select id="note-scene"><option value="">the last scene</option></select>
+            </label>
+            <span class="grow"></span>
+            <button class="ghost" id="btn-changes-cancel" type="button">Cancel</button>
+            <button class="primary" id="btn-changes-send" type="button">Send changes</button>
+          </div>
         </div>
-        <button class="primary big" id="btn-create" type="button">Create spot</button>
       </div>
     </section>
 
-    <!-- paso 2 y 3: verlo y decidir -->
-    <section class="spot" id="view-spot" hidden>
-      <div class="videostage">
-        <div class="videowrap">
-          <video id="player" playsinline muted controls></video>
-          <div class="chip" id="chip-live" hidden><i></i><span id="chip-live-text">Generating</span></div>
-          <div class="veil" id="veil" hidden><span id="veil-text">Preparing the first shot…</span></div>
-        </div>
+    <!-- ─────────────── TIMELINE ───────────────
+         Las escenas SON la línea de tiempo: bloques proporcionales a su duración
+         real, huecos donde todavía no hay imagen, y un playhead que sigue al vídeo. -->
+    <section class="panel p-timeline">
+      <div class="panel-head">
+        <span class="panel-name">Timeline</span>
+        <span class="panel-meta" id="tl-meta"></span>
       </div>
-      <div class="progress" id="progress" hidden><i id="progress-fill"></i></div>
-
-      <div class="stagebar">
-        <div class="stageinfo">
-          <p class="stagekicker" id="spot-kicker"></p>
-          <h2 id="spot-title">—</h2>
-          <p class="say" id="spot-line">—</p>
-          <p class="topmeta" id="topmeta"></p>
-        </div>
-        <div class="stageact" id="stage-actions"></div>
-      </div>
-
-      <!-- pedir cambios -->
-      <div class="changes" id="changes" hidden>
-        <label for="note">What would you change?</label>
-        <textarea id="note" rows="2" spellcheck="false"
-          placeholder="The logo is hard to read in the close-up."></textarea>
-        <div class="changes-row">
-          <label class="pick">Apply to
-            <select id="note-scene"><option value="">the last scene</option></select>
-          </label>
-          <span class="grow"></span>
-          <button class="ghost" id="btn-changes-cancel" type="button">Cancel</button>
-          <button class="primary" id="btn-changes-send" type="button">Send changes</button>
+      <div class="panel-body tlbody">
+        <div class="tl" id="tl">
+          <div class="tl-ruler" id="tl-ruler"></div>
+          <div class="tl-track" id="tl-track"></div>
+          <div class="tl-head" id="tl-head" hidden></div>
         </div>
       </div>
     </section>
 
-  </main>
+  </div>
 
-  <!-- ─────────────── raíl: la evidencia, siempre a la vista ─────────────── -->
-  <aside class="rail" id="rail" aria-label="Run">
-    <div class="rail-chips" id="r-chips"></div>
+  <!-- ─────────────── INSPECTOR ─────────────── -->
+  <aside class="panel p-inspector" id="rail" aria-label="Inspector">
+    <div class="panel-head">
+      <span class="panel-name">Inspector</span>
+      <span class="panel-meta" id="insp-meta"></span>
+    </div>
+    <div class="panel-body">
+      <div class="rail-chips" id="r-chips"></div>
 
-    <section class="rblock">
-      <h4>Scenes <span class="n" id="r-n-scenes"></span></h4>
-      <div id="r-scenes"></div>
-    </section>
+      <section class="rblock">
+        <h4>Scenes <span class="n" id="r-n-scenes"></span></h4>
+        <div id="r-scenes"></div>
+      </section>
 
-    <section class="rblock">
-      <h4>Provenance</h4>
-      <div id="r-prov"></div>
-      <div class="jsonbox" id="r-json">—</div>
-    </section>
+      <section class="rblock">
+        <h4>Provenance</h4>
+        <div id="r-prov"></div>
+        <div class="jsonbox" id="r-json">—</div>
+      </section>
 
-    <section class="rblock rblock-feed">
-      <h4>Events <span class="n" id="r-n-feed">0</span></h4>
-      <div class="feed" id="r-feed"></div>
-    </section>
+      <section class="rblock rblock-feed">
+        <h4>Events <span class="n" id="r-n-feed">0</span></h4>
+        <div class="feed" id="r-feed"></div>
+      </section>
+    </div>
   </aside>
 </div>
 
@@ -134,7 +188,7 @@
 
   <div class="tech-body">
     <details class="grp" open>
-      <summary>Provenance & lineage <span class="n" id="n-prov"></span></summary>
+      <summary>Provenance &amp; lineage <span class="n" id="n-prov"></span></summary>
       <div class="grp-body" id="g-prov"></div>
     </details>
 
@@ -169,6 +223,6 @@
 
 <script src="/vendor/hls.min.js"></script>
 <script src="/mse.js"></script>
-<script src="/app.js?v=15"></script>
+<script src="/app.js?v=16"></script>
 </body>
 </html>

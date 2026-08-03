@@ -90,116 +90,190 @@ button { cursor: pointer; }
 ::selection { background: var(--mist); color: var(--canvas); }
 :focus-visible { outline: 1px solid var(--mist); outline-offset: 2px; }
 
-/* ───────────────────────── cabecera ───────────────────────── */
-
-/* La misma barra que el nav de la landing: 60 px, lockup a 21/15 y enlaces de
- * 14 px en --ash. Nada de metadatos de ejecución en la primera línea. */
+/* ───────────────────────── barra de programa ─────────────────────────
+   Como la de cualquier suite de edición: marca a la izquierda y, a su lado,
+   `Proyecto — Spot`. Lo que está abierto se lee sin mirar a ningún panel. */
 .top {
-  height: 60px;
-  display: flex; align-items: center; gap: 28px;
-  padding: 0 32px;
-  border-bottom: 1px solid var(--border-2);
+  height: 48px; flex: 0 0 48px;
+  display: flex; align-items: center; gap: 22px;
+  padding: 0 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
 }
 .wordmark {
   display: flex; align-items: center; gap: 9px;
-  font-size: 15px; font-weight: 600; letter-spacing: -.015em; color: var(--white);
+  font-size: 14px; font-weight: 600; letter-spacing: -.015em; color: var(--white);
 }
 .wordmark svg { display: block; flex: none; }
+
+.crumb {
+  display: flex; align-items: baseline; gap: 8px; min-width: 0;
+  padding-left: 22px;
+  border-left: 1px solid var(--border);
+  font-size: 13px; letter-spacing: -.005em;
+}
+.crumb-p { color: var(--white); font-weight: 550; white-space: nowrap; }
+.crumb-s { color: var(--iron); }
+.crumb-j { color: var(--ash); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .linkbtn {
   background: none; border: 0;
   color: var(--ash);
-  font-size: 14px; font-weight: 450; letter-spacing: -.005em;
-  padding: 8px 0;
-  transition: color .18s ease;
+  font-size: 13px; font-weight: 450; letter-spacing: -.005em;
+  padding: 6px 10px; border-radius: 6px;
+  transition: color .18s ease, background .18s ease;
 }
-.linkbtn:hover { color: var(--white); }
+.linkbtn:hover { color: var(--white); background: rgba(255,255,255,.05); }
 .linkbtn[aria-expanded="true"] { color: var(--white); }
 
-/* ───────────────────────── estructura ───────────────────────── */
+/* ───────────────────────── sistema de paneles ─────────────────────────
+   Cada zona es un panel con nombre en versalitas: PROJECT, MONITOR, TIMELINE,
+   INSPECTOR. Así se nombran en Adobe y es lo que hace que esto se lea como un
+   programa y no como una página. Separación por hairline, nunca por sombra. */
 
-.shell { display: flex; height: calc(100vh - 60px); }
+.shell { display: flex; height: calc(100vh - 48px); gap: 1px; background: var(--border-2); }
 
-/* ───────────────────────── lateral ───────────────────────── */
-
-.side {
-  width: 212px; flex: 0 0 212px;
-  border-right: 1px solid var(--border-2);
-  padding: 32px 0 0;
+.panel {
   display: flex; flex-direction: column;
-  overflow: hidden;
+  min-width: 0; min-height: 0;
+  background: var(--canvas);
 }
+.panel-head {
+  flex: 0 0 30px; height: 30px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-2);
+}
+.panel-name {
+  font-family: var(--mono);
+  font-size: 10px; font-weight: 400;
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--ash);
+  white-space: nowrap;
+}
+.panel-meta {
+  margin-left: auto; min-width: 0;
+  display: flex; flex-wrap: nowrap; align-items: baseline; gap: 0 8px;
+  font-family: var(--mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--smoke);
+  overflow: hidden; white-space: nowrap;
+}
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; }
+.panel-body::-webkit-scrollbar { width: 8px; height: 8px; }
+.panel-body::-webkit-scrollbar-thumb { background: var(--badge); border-radius: 8px; }
+
+.headbtn {
+  margin-left: auto;
+  background: none; border: 0; color: var(--smoke);
+  font-size: 14px; line-height: 1; padding: 3px 6px; border-radius: 5px;
+  transition: color .15s, background .15s;
+}
+.headbtn:hover { color: var(--white); background: rgba(255,255,255,.07); }
+
+/* ───────────────────────── PROJECT ───────────────────────── */
+
+.p-project { width: 226px; flex: 0 0 226px; }
+.p-project .panel-body { padding: 12px 0 16px; }
 
 .newbtn {
-  display: block; width: calc(100% - 32px); margin: 0 16px;
+  display: block; width: calc(100% - 24px); margin: 0 12px;
   text-align: left;
   background: rgba(255,255,255,.045);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 7px;
   color: var(--white);
-  padding: 8px 12px;
-  font-size: 13.5px; font-weight: 500;
+  padding: 7px 11px;
+  font-size: 13px; font-weight: 500;
   transition: background .18s ease, border-color .18s ease;
 }
 .newbtn::before { content: "+"; margin-right: 8px; color: var(--smoke); }
 .newbtn:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16); }
 
-/* El mismo kicker de la landing: mono, versalitas, tracking .12em. */
-.side-label {
-  margin: 28px 16px 10px;
-  font-family: var(--mono);
-  font-size: 11px; font-weight: 400;
-  text-transform: uppercase; letter-spacing: .12em;
-  color: var(--smoke);
+.newproj { margin: 8px 12px 0; }
+#newproj-name {
+  width: 100%;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--coral);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 13px; color: var(--white);
+  outline: none;
 }
+#newproj-name::placeholder { color: var(--smoke); }
 
-.joblist { overflow-y: auto; padding-bottom: 16px; }
-.joblist::-webkit-scrollbar { width: 8px; }
-.joblist::-webkit-scrollbar-thumb { background: var(--badge); border-radius: 8px; }
+/* — el árbol: proyectos plegables con sus spots dentro — */
+
+.tree { margin-top: 14px; }
+
+.proj-head {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  background: none; border: 0; text-align: left;
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 10.5px; font-weight: 400;
+  text-transform: uppercase; letter-spacing: .11em;
+  color: var(--smoke);
+  transition: color .15s;
+}
+.proj-head:hover { color: var(--white); }
+.proj-head.cur { color: var(--white); }
+.proj-head .tw { flex: none; width: 8px; color: var(--iron); font-style: normal; }
+.proj-head .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-head .n  { margin-left: auto; color: var(--iron); }
+
+.proj-spots { padding-bottom: 6px; }
+.proj-empty { font-size: 12px; color: var(--iron); padding: 4px 12px 8px 27px; }
 
 .jobrow {
   display: block; width: 100%; text-align: left;
   background: none; border: 0;
-  padding: 11px 16px;
+  padding: 7px 12px 7px 27px;
+  border-left: 2px solid transparent;
   transition: background .12s;
 }
 .jobrow:hover { background: rgba(255,255,255,.03); }
-.jobrow.sel   { background: rgba(255,255,255,.06); }
+.jobrow.sel   { background: rgba(255,255,255,.06); border-left-color: var(--coral); }
 
 .jobrow b {
   display: block;
-  font-size: 14px; font-weight: 500; letter-spacing: .014em;
-  color: var(--white);
+  font-size: 13px; font-weight: 500; letter-spacing: .01em;
+  color: var(--ash);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.jobrow.sel b { color: var(--white); }
 /* El estado es una micro-etiqueta técnica, no una pastilla de color. */
 .jobrow span {
-  display: block; margin-top: 4px;
+  display: block; margin-top: 2px;
   font-family: var(--mono);
-  font-size: 10.5px; font-weight: 400;
+  font-size: 9.5px; font-weight: 400;
   text-transform: uppercase; letter-spacing: .1em;
   color: var(--smoke);
 }
 .jobrow span i { display: none; }
-.jobrow span.t-live  { color: var(--ash); }
-.jobrow span.t-ready { color: var(--white); }
+.jobrow span.t-live  { color: var(--info); }
+.jobrow span.t-ready { color: var(--coral); }
 .jobrow span.t-good  { color: var(--ok); }
 .jobrow span.t-bad   { color: var(--bad); }
 
 .side-empty { font-size: 13px; color: var(--smoke); padding: 8px 16px; line-height: 1.5; }
 
-/* ───────────────────────── escenario ───────────────────────── */
+/* ───────────────────────── MONITOR ───────────────────────── */
 
-.main {
-  flex: 1; min-width: 0;
+.center { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; background: var(--border-2); }
+
+.p-monitor { flex: 1; min-height: 0; }
+.monbody {
+  position: relative;
   display: flex; flex-direction: column;
-  padding: 32px clamp(28px, 3.4vw, 48px) 36px;
+  padding: 20px clamp(20px, 2.4vw, 34px) 22px;
   overflow: hidden;
 }
 
 /* — paso 1: el brief — */
 
-.compose { margin: auto; width: 100%; max-width: 600px; padding-bottom: 40px; }
+.compose { margin: auto; width: 100%; max-width: 600px; }
 
 /* La misma escala que los h2 de la landing: peso 620 y tracking NEGATIVO.
  * El tracking positivo de antes venía de otro sistema y la delataba. */
@@ -228,7 +302,26 @@ button { cursor: pointer; }
 #brief::placeholder { color: var(--smoke); }
 #brief:focus { border-color: rgba(255,255,255,.22); }
 
-.compose-row { display: flex; align-items: center; gap: 10px; margin-top: 20px; }
+.compose-row { display: flex; align-items: flex-end; gap: 16px; margin-top: 20px; }
+
+/* Campos con etiqueta en versalitas: el proyecto se elige aquí, igual que en
+ * cualquier diálogo de "nueva secuencia". */
+.field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.field > span {
+  font-family: var(--mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--smoke);
+}
+#proj-picker {
+  max-width: 210px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border); border-radius: 999px;
+  color: var(--white); font-size: 13.5px; font-weight: 500;
+  padding: 8px 12px; outline: none;
+  transition: border-color .18s ease;
+}
+#proj-picker:hover { border-color: rgba(255,255,255,.16); }
+#proj-picker option { background: var(--card); color: var(--white); }
 
 .seg { display: inline-flex; gap: 0; background: rgba(255,255,255,.05); border-radius: 999px; padding: 3px; }
 .seg button {
@@ -243,17 +336,20 @@ button { cursor: pointer; }
 
 /* — paso 2 y 3: el vídeo — */
 
-.spot { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
-/* El grupo vídeo + datos se centra junto; el plano no se queda flotando solo. */
-.videostage { flex: 0 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.spot { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* El monitor manda: el plano se come todo el alto que sobra y la barra de
+ * transporte se queda pegada abajo, como el program monitor de una suite. */
+.videostage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
 
 /* El mismo marco con el que la landing presenta una captura: radio de 14,
  * anillo de 1 px y un rescoldo coral muy bajo. Nada más — el plano manda. */
 .videowrap {
   position: relative;
-  width: 100%; aspect-ratio: 16/9; max-height: 100%;
+  aspect-ratio: 16/9;
+  width: 100%; max-width: calc((100vh - 300px) * 16 / 9);
+  max-height: 100%;
   background: #000;
-  border-radius: 14px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow:
     0 0 0 1px var(--border),
@@ -285,24 +381,20 @@ button { cursor: pointer; }
   font-size: 14px; text-align: center; padding: 24px;
 }
 
-.progress { height: 2px; border-radius: 99px; background: rgba(255,255,255,.07); margin-top: 20px; overflow: hidden; }
-.progress i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--ash); transition: width .4s ease; }
-
-/* El bloque del spot es lo segundo que se lee después del plano, así que tiene
- * saltos de verdad: kicker 11 → titular 30 → frase 17 → metadatos 11,5. */
-/* Con el raíl abierto en un portátil de 1280 el bloque se queda sin sitio y el
-   titular se parte en tres. Antes de eso, los botones bajan a su propia fila. */
+/* La barra de transporte del monitor: estado, título del spot y la única acción
+ * que toca ahora. Compacta, porque el plano se queda con el alto. */
 .stagebar {
-  display: flex; align-items: center; flex-wrap: wrap;
-  gap: 20px clamp(24px, 4vw, 56px);
-  padding-top: 30px;
+  flex: 0 0 auto;
+  display: flex; align-items: flex-end; flex-wrap: wrap;
+  gap: 14px clamp(20px, 3vw, 40px);
+  padding-top: 18px;
 }
-.stageinfo { min-width: min(100%, 420px); flex: 1; }
+.stageinfo { min-width: min(100%, 380px); flex: 1; }
 
 .stagekicker {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   font-family: var(--mono);
-  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
   color: var(--coral);
 }
 .stagekicker.ready { color: var(--coral); }
@@ -312,27 +404,20 @@ button { cursor: pointer; }
 
 .stageinfo h2 {
   margin: 0;
-  font-size: clamp(24px, 2.3vw, 32px);
-  font-weight: 620; line-height: 1.1; letter-spacing: -.03em;
+  font-size: clamp(20px, 1.8vw, 25px);
+  font-weight: 620; line-height: 1.12; letter-spacing: -.028em;
   color: var(--white);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.say { margin: 14px 0 0; color: var(--ash); font-size: 17px; line-height: 1.55; letter-spacing: -.006em; }
+.say { margin: 8px 0 0; color: var(--ash); font-size: 14.5px; line-height: 1.5; letter-spacing: -.005em; }
 .say b { color: var(--white); font-weight: 550; }
 .say.good { color: var(--ok); }
 .say.bad  { color: var(--bad); }
 
-/* Los datos de la ejecución: aquí abajo y en texto plano, no en pastillas en
- * la primera línea de la pantalla. */
-.topmeta {
-  margin: 14px 0 0;
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px;
-  font-family: var(--mono);
-  font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--smoke);
-}
+/* Los datos de la ejecución viven en la cabecera del panel, en mono y minúsculo:
+ * es la lectura del programa, no un titular. */
 .tm { white-space: nowrap; }
-.tm + .tm::before { content: "·"; margin-right: 10px; color: var(--iron); }
+.tm + .tm::before { content: "·"; margin-right: 8px; color: var(--iron); }
 .tm.ok { color: var(--ok); }
 .tm.on { color: var(--info); }
 
@@ -378,11 +463,16 @@ button { cursor: pointer; }
 
 /* — pedir cambios — */
 
+/* Sobre el monitor, como el popover de una herramienta: no empuja el plano ni
+ * obliga a hacer scroll dentro del panel. */
 .changes {
-  margin-top: 24px;
-  border-radius: 14px;
-  box-shadow: var(--key);
-  padding: 24px;
+  position: absolute; z-index: 5;
+  right: clamp(20px, 2.4vw, 34px); bottom: 22px;
+  width: min(460px, calc(100% - 2 * clamp(20px, 2.4vw, 34px)));
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--key), 0 24px 60px -24px rgba(0,0,0,.9);
+  padding: 18px;
 }
 .changes > label {
   display: block; margin-bottom: 10px;
@@ -402,17 +492,17 @@ button { cursor: pointer; }
 #note::placeholder { color: var(--smoke); }
 #note:focus { border-color: rgba(255,255,255,.22); }
 
-.changes-row { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.changes-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 
 /* Con el formulario abierto, la acción evidente es enviar los cambios. El
  * coral de "Approve" se apaga para que no haya dos CTAs discutiendo. */
-.spot:has(#changes:not([hidden])) #stage-actions .primary {
+.monbody:has(#changes:not([hidden])) #stage-actions .primary {
   background: rgba(255,255,255,.045);
   border-color: var(--border);
   color: var(--white);
   font-weight: 550;
 }
-.spot:has(#changes:not([hidden])) #stage-actions .primary:hover {
+.monbody:has(#changes:not([hidden])) #stage-actions .primary:hover {
   background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16);
 }
 .grow { flex: 1; }
@@ -420,6 +510,106 @@ button { cursor: pointer; }
 .pick select {
   background: rgba(255,255,255,.05); border: 0; border-radius: 8px;
   padding: 6px 8px; margin-left: 8px; outline: none; color: var(--white); font-size: 13px;
+}
+
+/* ───────────────────────── TIMELINE ─────────────────────────
+   Las escenas ya eran una línea de tiempo. Cada bloque mide lo que dura de
+   verdad (los segmentos HLS traen su duración), las que faltan son huecos que
+   se rellenan solos, y el playhead sigue al vídeo. */
+
+.p-timeline { flex: 0 0 auto; }
+.tlbody { padding: 12px 16px 14px; overflow: hidden; }
+
+.tl { position: relative; }
+
+.tl-ruler {
+  position: relative; height: 15px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-2);
+}
+.tl-tick {
+  position: absolute; bottom: 0;
+  border-left: 1px solid var(--border);
+  height: 5px;
+}
+.tl-tick.lab { height: 15px; border-left-color: rgba(255,255,255,.14); }
+.tl-tick > span {
+  position: absolute; left: 4px; top: -1px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .06em;
+  color: var(--iron); white-space: nowrap;
+}
+
+.tl-track { display: flex; gap: 2px; height: 58px; }
+
+.tl-clip {
+  position: relative;
+  min-width: 0; overflow: hidden;
+  border-radius: 4px;
+  padding: 7px 9px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: var(--recessed);
+  box-shadow: inset 0 0 0 1px var(--border-2);
+  text-align: left;
+  border: 0;
+  transition: background .15s, box-shadow .15s;
+}
+.tl-clip .cn {
+  font-size: 11.5px; font-weight: 500; letter-spacing: -.005em;
+  color: var(--ash);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tl-clip .cs {
+  font-family: var(--mono);
+  font-size: 9px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--iron);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Lista: una tira coral a la izquierda, como el color label de un clip. */
+.tl-clip.ready {
+  background: #16171a;
+  box-shadow: inset 0 0 0 1px var(--border), inset 3px 0 0 0 var(--coral);
+  padding-left: 12px;
+}
+.tl-clip.ready .cn { color: var(--white); }
+.tl-clip.ready .cs { color: var(--smoke); }
+.tl-clip.ready:hover { background: #1d1e22; }
+
+/* En proceso: la misma tira, en el azul de "esto está pasando". */
+.tl-clip.rendering {
+  background: #131519;
+  box-shadow: inset 0 0 0 1px var(--border), inset 3px 0 0 0 var(--info);
+  padding-left: 12px;
+}
+.tl-clip.rendering .cs { color: var(--info); }
+
+/* Pendiente: un hueco. Se ve exactamente lo que falta por rellenar. */
+.tl-clip.pending {
+  background: repeating-linear-gradient(-45deg,
+    rgba(255,255,255,.022) 0 6px, transparent 6px 12px);
+  box-shadow: inset 0 0 0 1px var(--border-2);
+}
+.tl-clip.failed { box-shadow: inset 0 0 0 1px rgba(255,77,77,.35), inset 3px 0 0 0 var(--bad); padding-left: 12px; }
+.tl-clip.failed .cs { color: var(--bad); }
+
+.tl-clip.cur { box-shadow: inset 0 0 0 1px rgba(255,255,255,.28), inset 3px 0 0 0 var(--coral); }
+
+.tl-empty {
+  height: 58px; display: flex; align-items: center;
+  font-family: var(--mono); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: .12em;
+  color: var(--iron);
+}
+
+/* El playhead: 1 px coral con su cabeza, encima de todo. */
+.tl-head {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: var(--coral);
+  pointer-events: none;
+}
+.tl-head::before {
+  content: ""; position: absolute; top: 0; left: -4px;
+  border-left: 4.5px solid transparent; border-right: 4.5px solid transparent;
+  border-top: 6px solid var(--coral);
 }
 
 /* ───────────────────────── panel técnico ───────────────────────── */
@@ -572,24 +762,17 @@ button { cursor: pointer; }
 .toast.bad  small { color: var(--bad); }
 .toast small { display: block; font-weight: 400; font-size: 13px; color: var(--ash); margin-top: 4px; }
 
-/* ───────────────────────── raíl de ejecución ─────────────────────────
-   Siempre a la vista: chips de sesión, escenas, procedencia con JSON vivo y
-   el feed de eventos de B2. Es la sustancia técnica del producto, curada —
-   lo profundo (AgentLoop, objetos, chaos, verify) sigue en el panel. */
+/* ───────────────────────── INSPECTOR ─────────────────────────
+   El panel técnico de siempre, encajado en el sistema de paneles: chips de
+   sesión, escenas, procedencia con JSON vivo y el feed de eventos de B2. Lo
+   profundo (AgentLoop, objetos, chaos, verify) sigue en Technical details. */
 
-.rail {
-  width: 296px; flex: 0 0 296px;
-  border-left: 1px solid var(--border-2);
-  background: var(--card);
-  display: flex; flex-direction: column;
-  overflow-y: auto;
-}
-.rail::-webkit-scrollbar { width: 8px; }
-.rail::-webkit-scrollbar-thumb { background: var(--badge); border-radius: 8px; }
+.p-inspector { width: 300px; flex: 0 0 300px; }
+.p-inspector .panel-body { display: flex; flex-direction: column; }
 
-.rail-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 18px; border-bottom: 1px solid var(--border-2); }
+.rail-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 14px 16px; border-bottom: 1px solid var(--border-2); }
 
-.rblock { padding: 18px; border-bottom: 1px solid var(--border-2); }
+.rblock { padding: 16px; border-bottom: 1px solid var(--border-2); }
 .rblock:last-child { border-bottom: 0; }
 .rblock h4 {
   margin: 0 0 14px;
@@ -612,6 +795,6 @@ button { cursor: pointer; }
 .rblock-feed .feedrow .k { flex: 1 1 auto; }
 .rblock-feed .feedrow .d { flex: 0 0 100%; padding-left: 56px; color: var(--smoke); }
 
-/* El raíl se cierra desde la cabecera: el jurado ve la evidencia y quien graba
-   puede dejar el plano a ancho completo. */
-body.no-rail .rail { display: none; }
+/* El inspector se cierra desde la cabecera: quien graba puede dejar el monitor
+   a ancho completo sin perder nada. */
+body.no-rail .p-inspector { display: none; }

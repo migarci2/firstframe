@@ -1,8 +1,12 @@
 /* FirstFrame — frontend vanilla, sin build, sin CDN.
  *
+ * Se lee como un programa de edición: cuatro paneles con nombre —PROJECT,
+ * MONITOR, TIMELINE, INSPECTOR— y una barra de programa que dice qué hay
+ * abierto (`Proyecto — Spot`).
+ *
  * Dos públicos, una app:
- *   · Vista principal → Ana, productora. Escribe un brief, ve el vídeo mientras
- *     se genera, aprueba o pide cambios. Cero jerga, cero identificadores.
+ *   · Paneles principales → Ana, productora. Elige proyecto, escribe un brief,
+ *     ve el vídeo mientras se genera, aprueba o pide cambios.
  *   · Panel "Detalles técnicos" → la evidencia cruda (B2, procedencia, linaje,
  *     AgentLoop, eventos, chaos). Nada se borra: se esconde.
  *
@@ -15,6 +19,9 @@
 
 var S = {
   jobs: [],
+  projects: [],        // [{name, spots}]
+  project: null,       // el proyecto activo: donde caen los spots nuevos
+  folded: {},          // {nombre: true} — proyectos plegados en el árbol
   sel: null,
   detail: null,
   view: 'compose',     // 'compose' | 'spot'
@@ -30,6 +37,7 @@ var S = {
 
 var FEED_MAX = 140;
 var CHAOS_PROVIDERS = ['gmicloud', 'nim', 'openai', 'replicate'];
+var DEFAULT_PROJECT = 'Untitled Project';
 
 /* ═════════════════════════════ utilidades ═════════════════════════════ */
 
@@ -50,6 +58,7 @@ function jobById(id) {
 }
 function selJob() { return S.sel ? jobById(S.sel) : null; }
 function isLive(j) { return j && (j.status === 'rendering' || j.status === 'queued'); }
+function projectOf(j) { return (j && j.project) || DEFAULT_PROJECT; }
 
 function api(path, opts) {
   opts = opts || {};
@@ -338,6 +347,9 @@ function showCompose() {
   $('view-spot').hidden = true;
   $('changes').hidden = true;
   renderJobs();
+  renderProjectPicker();
+  renderCrumb();
+  renderTimeline();
   renderRail();
   renderTech();
   setTimeout(function () { $('brief').focus(); }, 30);
@@ -356,39 +368,160 @@ function select(id, opts) {
   if (changed) $('changes').hidden = true;
 
   if (changed || opts.force) Player.load(job);
+  // Abrir un spot deja su proyecto como activo y desplegado: la cabecera y el
+  // árbol dicen lo mismo que el monitor.
+  S.project = projectOf(job);
+  S.folded[S.project] = false;
 
   renderJobs();
   renderStage();
+  renderProjectPicker();
   renderRail();
   renderTech();
   loadDetail(id);
 }
 
-/* ═════════════════════════ lateral: los spots ═════════════════════════ */
+/* ═════════════════════ panel PROJECT: el navegador ═════════════════════
+ * Proyectos plegables con sus spots dentro. Un proyecto es la carpeta y el
+ * spot es la secuencia: exactamente el árbol de cualquier suite de edición. */
+
+// Todos los proyectos que existen: los declarados en el servidor MÁS los que
+// solo aparecen porque algún spot los nombra.
+function allProjects() {
+  var seen = {}, out = [];
+  S.projects.forEach(function (p) {
+    if (seen[p.name]) return;
+    seen[p.name] = true;
+    out.push(p.name);
+  });
+  S.jobs.forEach(function (j) {
+    var n = projectOf(j);
+    if (seen[n]) return;
+    seen[n] = true;
+    out.push(n);
+  });
+  if (!out.length) out.push(DEFAULT_PROJECT);
+  return out;
+}
+
+function jobsOf(name) {
+  return S.jobs.filter(function (j) { return projectOf(j) === name; });
+}
 
 function renderJobs() {
-  var list = $('joblist');
-  var scroll = list.scrollTop;
-  clear(list);
+  var tree = $('tree');
+  if (!tree) return;
+  var scroll = tree.parentNode ? tree.parentNode.scrollTop : 0;
+  clear(tree);
 
-  if (!S.jobs.length) {
-    list.appendChild(el('div', 'side-empty', 'You have not created any yet.'));
-    return;
-  }
+  allProjects().forEach(function (name) {
+    var mine = jobsOf(name);
+    var folded = !!S.folded[name];
 
-  S.jobs.forEach(function (job) {
-    var row = el('button', 'jobrow' + (job.id === S.sel ? ' sel' : ''));
-    row.type = 'button';
-    row.appendChild(el('b', null, spotTitle(job)));
-    var st = statusOf(job);
-    var s = el('span', 't-' + st.tone);
-    s.appendChild(el('i'));
-    s.appendChild(document.createTextNode(st.label));
-    row.appendChild(s);
-    row.addEventListener('click', function () { select(job.id); });
-    list.appendChild(row);
+    var head = el('button', 'proj-head' + (name === S.project ? ' cur' : ''));
+    head.type = 'button';
+    head.setAttribute('aria-expanded', folded ? 'false' : 'true');
+    head.appendChild(el('i', 'tw', folded ? '▸' : '▾'));
+    head.appendChild(el('span', 'nm', name));
+    head.appendChild(el('span', 'n', String(mine.length)));
+    head.addEventListener('click', function () {
+      // Un clic hace las dos cosas que se esperan: pliega y deja el proyecto
+      // activo, que es donde va a caer el siguiente spot.
+      S.project = name;
+      S.folded[name] = !folded;
+      renderJobs();
+      renderProjectPicker();
+      renderCrumb();
+    });
+    tree.appendChild(head);
+
+    if (folded) return;
+
+    var box = el('div', 'proj-spots');
+    if (!mine.length) {
+      box.appendChild(el('div', 'proj-empty', 'No spots yet.'));
+    } else {
+      mine.forEach(function (job) {
+        var row = el('button', 'jobrow' + (job.id === S.sel ? ' sel' : ''));
+        row.type = 'button';
+        row.appendChild(el('b', null, spotTitle(job)));
+        var st = statusOf(job);
+        var s = el('span', 't-' + st.tone);
+        s.appendChild(el('i'));
+        s.appendChild(document.createTextNode(st.label));
+        row.appendChild(s);
+        row.addEventListener('click', function () { select(job.id); });
+        box.appendChild(row);
+      });
+    }
+    tree.appendChild(box);
   });
-  list.scrollTop = scroll;
+
+  if (tree.parentNode) tree.parentNode.scrollTop = scroll;
+}
+
+function renderProjectPicker() {
+  var sel = $('proj-picker');
+  if (!sel) return;
+  var keep = S.project || sel.value;
+  clear(sel);
+  allProjects().forEach(function (n) {
+    var o = el('option', null, n);
+    o.value = n;
+    sel.appendChild(o);
+  });
+  if (keep && jobsOfName(keep)) sel.value = keep;
+  S.project = sel.value || allProjects()[0];
+}
+
+function jobsOfName(n) {
+  return allProjects().indexOf(n) !== -1;
+}
+
+function renderCrumb() {
+  var job = selJob();
+  var p = job ? projectOf(job) : (S.project || DEFAULT_PROJECT);
+  $('crumb-project').textContent = p;
+  $('crumb-spot').textContent = job ? spotTitle(job)
+    : (S.view === 'compose' ? 'new spot' : 'no spot open');
+}
+
+/* Crear proyecto: una fila de texto en el propio panel, sin diálogo. */
+function openNewProject() {
+  var f = $('newproj');
+  f.hidden = false;
+  $('newproj-name').value = '';
+  $('newproj-name').focus();
+}
+
+function submitNewProject(e) {
+  if (e) e.preventDefault();
+  var name = $('newproj-name').value.trim();
+  $('newproj').hidden = true;
+  if (!name) return;
+
+  // Optimista: el proyecto aparece ya y se convierte en el activo. Si el POST
+  // falla, el spot que se cree ahí lo crearía igual en el servidor.
+  if (allProjects().indexOf(name) === -1) S.projects.push({ name: name, spots: 0 });
+  S.project = name;
+  S.folded[name] = false;
+  renderJobs();
+  renderProjectPicker();
+  renderCrumb();
+
+  api('/api/projects', { method: 'POST', body: { name: name } })
+    .then(function () { loadProjects(); })
+    .catch(function (err) { pushFeed('error', null, 'POST /api/projects: ' + err.message); });
+}
+
+function loadProjects() {
+  return api('/api/projects').then(function (d) {
+    S.projects = d.projects || [];
+    if (!S.project) S.project = allProjects()[0];
+    renderJobs();
+    renderProjectPicker();
+    renderCrumb();
+  }).catch(function () {});
 }
 
 /* ═════════════════════════ escenario ═════════════════════════ */
@@ -413,19 +546,9 @@ function renderStage() {
     chip.hidden = true;
   }
 
-  // Progreso: una línea de 2 px, sin números ni contadores.
-  var scenes = job.scenes || [];
-  var total = job.scene_count || scenes.length || 1;
-  var ready = scenes.filter(function (s) { return s.status === 'ready'; }).length;
-  var bar = $('progress');
-  if (isLive(job) && !isRefining(job)) {
-    bar.hidden = false;
-    $('progress-fill').style.width = Math.round((ready / total) * 100) + '%';
-  } else {
-    bar.hidden = true;
-  }
-
   topMeta();
+  renderCrumb();
+  renderTimeline();
   renderActions(job);
   renderNoteScenes(job);
 }
@@ -486,6 +609,121 @@ function openChanges() {
   $('note').focus();
 }
 
+/* ═══════════════════════ panel TIMELINE ═══════════════════════
+ * Las escenas SON la línea de tiempo. El servidor manda `start` y `seconds`
+ * por escena, sacados de la duración real de los segmentos HLS: los bloques
+ * miden lo que duran de verdad. Lo que aún no existe se dibuja como hueco. */
+
+var NOMINAL_SEC = 4;   // lo que se le supone a una escena que todavía no existe
+
+function renderTimeline() {
+  var track = $('tl-track'), ruler = $('tl-ruler'), meta = $('tl-meta');
+  if (!track) return;
+  clear(track);
+  clear(ruler);
+
+  var job = selJob();
+  var scenes = (job && job.scenes) || [];
+
+  if (!job || !scenes.length) {
+    meta.textContent = '';
+    track.appendChild(el('div', 'tl-empty',
+      job ? 'no scenes yet' : 'no sequence open'));
+    $('tl-head').hidden = true;
+    return;
+  }
+
+  var ready = 0, dur = 0;
+  scenes.forEach(function (s) {
+    if (s.status === 'ready') ready++;
+    dur += (s.seconds != null ? s.seconds : NOMINAL_SEC);
+  });
+  var lead = job.lead_seconds || 0;
+  meta.textContent = ready + '/' + scenes.length + ' scenes · ' + fmtTC(dur);
+
+  scenes.forEach(function (s) {
+    var w = (s.seconds != null && s.seconds > 0) ? s.seconds : NOMINAL_SEC;
+    var clip = el('button', 'tl-clip ' + (s.status || 'pending'));
+    clip.type = 'button';
+    clip.style.flex = w + ' 1 0';
+    clip.title = 'Scene ' + s.n + (s.title ? ' — ' + s.title : '');
+    clip.appendChild(el('span', 'cn', s.n + '. ' + (s.title || 'Scene ' + s.n)));
+    clip.appendChild(el('span', 'cs',
+      s.status === 'ready' ? fmtTC(s.seconds != null ? s.seconds : 0)
+      : s.status === 'rendering' ? 'generating' : s.status));
+    // Clicar un clip mueve el vídeo al principio de esa escena. Es lo que
+    // espera cualquiera que haya tocado un timeline.
+    clip.addEventListener('click', function () { seekScene(s); });
+    track.appendChild(clip);
+  });
+
+  // Regla: una marca por segundo y etiqueta cada 5 (o cada 2 si es muy corto).
+  var step = dur > 24 ? 5 : 2;
+  for (var t = 0; t <= Math.floor(dur); t++) {
+    var pct = t / dur * 100;
+    var lab = t % step === 0 && pct < 92;   // la última etiqueta se saldría del panel
+    var tick = el('div', 'tl-tick' + (lab ? ' lab' : ''));
+    tick.style.left = pct + '%';
+    if (lab) tick.appendChild(el('span', null, fmtTC(t)));
+    ruler.appendChild(tick);
+  }
+
+  playhead(lead, dur);
+}
+
+function fmtTC(sec) {
+  sec = Math.max(0, sec || 0);
+  var m = Math.floor(sec / 60), s = sec - m * 60;
+  return m + ':' + (s < 10 ? '0' : '') + (Math.round(s * 10) / 10).toFixed(1).replace(/\.0$/, '');
+}
+
+function seekScene(s) {
+  var v = Player.video;
+  if (!v || s.start == null) return;
+  try { v.currentTime = s.start + 0.05; v.play().catch(function () {}); } catch (e) {}
+}
+
+/* El playhead se mide contra los BLOQUES reales, no contra un porcentaje del
+ * ancho: así sigue cuadrando aunque una escena dure el doble que otra. */
+function playhead(lead, dur) {
+  var head = $('tl-head'), track = $('tl-track');
+  var v = Player.video, job = selJob();
+  if (!head || !v || !job) return;
+
+  var t = v.currentTime || 0;
+  var scenes = job.scenes || [];
+  var clips = track.children;
+  var x = null;
+
+  for (var i = 0; i < scenes.length && i < clips.length; i++) {
+    var s = scenes[i];
+    if (s.start == null || !s.seconds) continue;
+    if (t >= s.start && t < s.start + s.seconds) {
+      x = clips[i].offsetLeft + (t - s.start) / s.seconds * clips[i].offsetWidth;
+      break;
+    }
+  }
+  // Antes de la primera escena estamos en la cabecera del leader: el playhead
+  // se queda a la izquierda del todo en vez de desaparecer.
+  if (x == null && t < lead) x = 0;
+  if (x == null) { head.hidden = true; return; }
+
+  head.hidden = false;
+  head.style.left = Math.round(x) + 'px';
+}
+
+var headRAF = null;
+function startPlayhead() {
+  if (headRAF) return;
+  var loop = function () {
+    var v = Player.video, job = selJob();
+    if (!v || v.paused || !job || S.view !== 'spot') { headRAF = null; return; }
+    playhead(job.lead_seconds || 0, 0);
+    headRAF = requestAnimationFrame(loop);
+  };
+  headRAF = requestAnimationFrame(loop);
+}
+
 /* ═════════════════════════ acciones ═════════════════════════ */
 
 function createSpot() {
@@ -497,16 +735,20 @@ function createSpot() {
   var btn = $('btn-create');
   btn.disabled = true;
   btn.textContent = 'Creating…';
+  var project = ($('proj-picker') && $('proj-picker').value) || S.project || DEFAULT_PROJECT;
 
   api('/api/jobs', { method: 'POST', body: {
-    brief: brief, title: brief.slice(0, 70), scenes: S.scenes
+    brief: brief, title: brief.slice(0, 70), scenes: S.scenes, project: project
   }}).then(function (d) {
-    var job = d.job || { id: d.id, status: 'queued', title: brief.slice(0, 70) };
+    var job = d.job || { id: d.id, status: 'queued', title: brief.slice(0, 70),
+                         project: project };
+    if (!job.project) job.project = project;
     upsertJob(job);
     S.sel = null;
     select(job.id, { force: true });
     $('brief').value = '';
     pushFeed('job_update', job.id, 'job created · pipeline started');
+    loadProjects();
   }).catch(function (e) {
     toast('bad', 'We could not create the spot.', 'Try again in a few seconds.', 9000);
     pushFeed('error', null, 'POST /api/jobs: ' + e.message);
@@ -843,7 +1085,7 @@ function renderChaos() {
 /* Los datos de la ejecución ya no son pastillas en la cabecera: el estado es el
  * kicker del bloque del spot y el resto una línea de texto mono debajo. */
 function topMeta() {
-  var box = $('topmeta'), kick = $('spot-kicker');
+  var box = $('mon-meta'), kick = $('spot-kicker');
   if (!box) return;
   clear(box);
   var job = selJob();
@@ -853,6 +1095,8 @@ function topMeta() {
     kick.textContent = st ? st.label : '';
     kick.className = 'stagekicker' + (st && st.tone ? ' ' + st.tone : '');
   }
+  var insp = $('insp-meta');
+  if (insp) insp.textContent = job ? job.id : '';
   if (!job) return;
 
   function t(txt, cls) { box.appendChild(el('span', 'tm' + (cls ? ' ' + cls : ''), txt)); }
@@ -1154,6 +1398,7 @@ function bootstrapJobs() {
   api('/api/jobs').then(function (d) {
     S.jobs = d.jobs || [];
     renderJobs();
+    renderProjectPicker();
     // Si ya hay trabajo hecho, se enseña; si no, la pantalla pide un brief.
     if (S.jobs.length) select(pickDefaultJob().id);
     else showCompose();
@@ -1207,11 +1452,24 @@ function start() {
 
   $('btn-create').addEventListener('click', createSpot);
   $('btn-new').addEventListener('click', showCompose);
-  // El raíl arranca cerrado: lo primero que se ve es el plano, a ancho completo.
-  // La evidencia sigue a un clic, y la profunda vive en el panel técnico.
+  $('btn-new-project').addEventListener('click', openNewProject);
+  $('newproj').addEventListener('submit', submitNewProject);
+  $('newproj-name').addEventListener('blur', function () { $('newproj').hidden = true; });
+  $('newproj-name').addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { $('newproj').hidden = true; }
+  });
+  $('proj-picker').addEventListener('change', function () {
+    S.project = this.value;
+    renderJobs();
+    renderCrumb();
+  });
+
+  // El inspector arranca abierto: es un panel del programa, no un extra. Se
+  // puede plegar desde la cabecera para dejar el monitor a ancho completo.
   $('btn-rail').addEventListener('click', function () {
     var hid = document.body.classList.toggle('no-rail');
     this.setAttribute('aria-expanded', hid ? 'false' : 'true');
+    renderTimeline();
   });
   $('btn-tech').addEventListener('click', function () { toggleTech(); });
   $('btn-tech-close').addEventListener('click', function () { toggleTech(false); });
@@ -1228,9 +1486,22 @@ function start() {
     });
   });
 
+  // El playhead sólo corre mientras el vídeo corre: nada de rAF en vacío.
+  Player.video.addEventListener('play', startPlayhead);
+  Player.video.addEventListener('seeked', function () {
+    var j = selJob();
+    if (j) playhead(j.lead_seconds || 0, 0);
+  });
+  Player.video.addEventListener('timeupdate', function () {
+    var j = selJob();
+    if (j && Player.video.paused) playhead(j.lead_seconds || 0, 0);
+  });
+  window.addEventListener('resize', function () { if (S.view === 'spot') renderTimeline(); });
+
   bindKeys();
   renderJobs();
   loadHealth();
+  loadProjects();
   bootstrapJobs();
   connectSSE();
 
