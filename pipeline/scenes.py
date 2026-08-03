@@ -52,6 +52,7 @@ from genblaze import (
 from genblaze_core.models.step import Step
 from genblaze_core.runnable.config import RunnableConfig
 
+from pipeline import prompts as PR
 from pipeline import providers as P
 from pipeline.free_provider import PollinationsProvider, _image_size
 from pipeline.judge import DEFAULT_THRESHOLD, FrameEvaluator, frame_evaluator
@@ -110,24 +111,17 @@ REFINE_TEMPLATE = PromptTemplate(template=(
     "Fix exactly that."
 ))
 
-# Plantilla del modo `free`. Distinta a proposito y MUCHO mas corta:
-#   - El ancla de estilo ya viene dentro de `shot` (la mete `runner.plan_scenes`),
-#     asi que las 3 escenas comparten paleta, luz y tratamiento sin repetirlo aqui.
-#   - Nada de "scene 3 of 3" ni del brief entero: los numeros y los nombres de
-#     marca hacen que el modelo intente ESCRIBIRLOS en la imagen.
-#   - "no people": el tier anonimo hace caras de plastico. Planos generales,
-#     producto y textura son donde este modelo es bueno (medido, PLAN §0).
-FREE_KEYFRAME_TEMPLATE = PromptTemplate(template=(
-    "{shot}. Cinematic advertising still, 16:9, no people, no text, no logos, "
-    "professional color grading, high detail.{refine}"
-))
+# El prompt de generacion REAL (free y real) ya NO se arma aqui: lo construye
+# `pipeline/prompts.py` desde el brief del usuario. El motivo esta entero en el
+# docstring de ese fichero; el resumen es que la version que vivia aqui pegaba
+# el brief CRUDO delante del plano ("serum facial premium, marmol blanco..."),
+# y con eso el generador devolvia un primer plano de una cara: `facial` era el
+# unico sustantivo que el text encoder reconocia, y `no people` — una negacion,
+# que CLIP no sabe aplicar — remataba metiendo *gente* en el embedding.
+#
 # `negative_prompt` viaja como campo de Step (el pipeline lo saca de params) y
 # entra en la clave de cache, asi que cambiarlo invalida el corpus a proposito.
-FREE_NEGATIVE_PROMPT = (
-    "human face, portrait, person, people, hands, fingers, text, letters, words, "
-    "watermark, signature, logo, ugly, deformed, disfigured, low quality, blurry, "
-    "jpeg artifacts, oversaturated, collage, frame, border"
-)
+FREE_NEGATIVE_PROMPT = PR.NEGATIVE_PROMPT
 
 
 @dataclass(frozen=True)
@@ -423,15 +417,23 @@ def keyframe_prompt(scene: Scene, brief: str, feedback: str | None,
                     iteration: int, *, mode: str = "mock") -> str:
     """Prompt del keyframe, con la razon del juez inyectada al refinar.
 
-    En modo `free` se usa una plantilla distinta (ver `FREE_KEYFRAME_TEMPLATE`):
-    corta, sin numeros de escena y sin el brief crudo, porque el modelo del
-    tier anonimo intenta dibujar cualquier texto que le llegue.
+    Cuando hay un generador de imagen de verdad detras (`free` y `real`) el
+    prompt se REESCRIBE desde el brief con `pipeline.prompts`: sujeto en ingles
+    y siempre un objeto, ancla de estilo derivada del brief y compartida por las
+    3 escenas, y arco apertura/detalle/heroe. `scene.keyframe_prompt` solo entra
+    para rescatar la nota del revisor que le pega `runner.refine_scene`.
+
+    En `mock` se deja la plantilla vieja tal cual: ahi no hay modelo que
+    engañar (sale un testsrc2 de ffmpeg) y el manifest de los runs mock ya
+    grabados sigue cuadrando.
     """
     refine = ""
     if feedback and iteration > 0:
         refine = REFINE_TEMPLATE.render(feedback=feedback)
-    if mode == "free":
-        return FREE_KEYFRAME_TEMPLATE.render(shot=scene.keyframe_prompt, refine=refine)
+    if mode in ("free", "real", "mixed"):
+        return PR.keyframe_prompt(brief, n=scene.n, title=scene.title,
+                                  extra=refine,
+                                  scene_prompt_hint=scene.keyframe_prompt)
     return KEYFRAME_TEMPLATE.render(n=scene.n, title=scene.title,
                                     shot=scene.keyframe_prompt,
                                     brief=brief.strip(), refine=refine)
@@ -702,10 +704,23 @@ def demo() -> None:
             # --mock manda sobre el env: no romper el camino sin red.
             assert resolve_providers(sc, wd, mock=True).mode == "mock"
 
-            # Prompt de free: sin numero de escena, sin el brief crudo, sin caras.
-            text = keyframe_prompt(sc, "spot para la marca ACME", None, 0, mode="free")
-            assert "no people" in text and "ACME" not in text, text
-            assert "scene" not in text.lower(), text
+            # Prompt de free: lo arma pipeline.prompts desde el brief. Ni el
+            # nombre de marca (el modelo intentaria escribirlo), ni el numero
+            # de escena, ni una negacion de persona en el prompt POSITIVO.
+            text = keyframe_prompt(sc, "serum para la marca ACME, marmol blanco",
+                                   None, 0, mode="free")
+            assert "ACME" not in text, text
+            assert "scene 1" not in text.lower(), text
+            assert "no people" not in text and "face" not in text.lower(), text
+            assert "still life product photography" in text, text
+            # ...y fidelidad: lo que pide el brief tiene que llegar al modelo.
+            assert "dropper bottle" in text and "white marble" in text, text
+            # El arco: tres escenas, tres planos distintos, mismo ancla.
+            arc = [keyframe_prompt(Scene(i, t, "", "", ""), "serum, marmol blanco",
+                                   None, 0, mode="free")
+                   for i, t in ((1, "apertura"), (2, "detalle"), (3, "cierre"))]
+            assert len({a.split(".")[0] for a in arc}) == 3, arc
+            assert all(PR.style_anchor("serum, marmol blanco") in a for a in arc)
             assert prompt_seed(text) == prompt_seed(text), "la seed no es deterministica"
             assert prompt_seed(text) != prompt_seed(text + "!"), "la seed no depende del prompt"
 

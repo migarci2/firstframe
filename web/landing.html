@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>FirstFrame — ver el spot antes de que termine de generarse</title>
+<meta name="description" content="FirstFrame emite cada escena a Backblaze B2 según se genera, así que la primera toma revisable aparece en segundos en vez de minutos.">
+<link rel="stylesheet" href="/landing.css?v=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230A0C0E'/><path d='M10 9h12v3.2H13.4v3.9h7.8v3.2h-7.8V24H10z' fill='%23EDE7DC'/></svg>">
+</head>
+<body>
+
+<nav class="nav">
+  <a class="mark" href="#top">FirstFrame<i>.</i></a>
+  <div class="links">
+    <a href="#tesis">Tesis</a>
+    <a href="#catalogo">Catálogo</a>
+    <a href="#sistema">Sistema</a>
+    <a href="#medidas">Medidas</a>
+  </div>
+  <a class="pill" href="/">Abrir la app</a>
+</nav>
+
+<!-- ─────────────────────────── portal ─────────────────────────── -->
+<section class="portal" id="top">
+  <div class="stage" id="stage">
+    <img class="ph-img" id="ph-img" src="/assets/hero.jpg" alt="Fotograma generado por FirstFrame: una bolsa de café de especialidad sobre madera oscura.">
+    <div class="ph-duo" id="ph-duo"></div>
+    <div class="ph-veil"></div>
+
+    <i class="dot d-a" id="dot-a"></i>
+    <i class="dot d-b" id="dot-b"></i>
+
+    <div class="panel p-l" id="p-l"></div>
+    <div class="panel p-r" id="p-r"></div>
+
+    <div class="ptitle">
+      <div class="t" id="ptitle"><span id="t1">FIRST</span><span id="t2">FRAME</span></div>
+    </div>
+
+    <div class="corner c-tl">FirstFrame<br>Sala de revisión</div>
+    <div class="corner c-tr">Genblaze 0.4.5<br>Backblaze B2</div>
+    <div class="corner c-bl">Hackathon 2026</div>
+    <div class="corner c-br">eu-central-003</div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── tesis ─────────────────────────── -->
+<section class="sec statement" id="tesis">
+  <img class="orb" id="orb" src="/assets/sneaker.jpg" alt="">
+  <div class="numeral">01</div>
+  <p class="label reveal">01 — La tesis</p>
+  <h2 class="big reveal d1">Un spot tarda minutos en renderizarse. La primera toma revisable
+    <span class="amber">aparece en menos de diez segundos</span>
+    y ya se puede ver, juzgar y devolver.</h2>
+</section>
+
+<!-- ─────────────────────────── catálogo ─────────────────────────── -->
+<section class="sec" id="catalogo">
+  <div class="cat">
+    <div>
+      <p class="label reveal">02 — Catálogo</p>
+      <h2 class="reveal d1" style="margin-top:18px">Cuatro spots<br>generados de punta<br>a punta.</h2>
+      <p class="lede reveal d2">Cada pieza sale de un brief en castellano, se genera escena a escena
+        y se sube a Backblaze B2 mientras se hace. Estos son los briefs tal cual se escribieron.</p>
+      <div class="btns reveal d3">
+        <a class="pill solid" href="/">Abrir la sala de revisión</a>
+        <a class="pill" href="#medidas">Ver las medidas</a>
+      </div>
+    </div>
+
+    <div class="deckwrap reveal d2">
+      <div class="deck" id="deck" tabindex="0" role="group"
+           aria-label="Catálogo de spots. Usa las flechas izquierda y derecha para pasar."></div>
+      <p class="hint">Arrastra o usa ← →</p>
+      <div class="dots" id="dots"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── sistema ─────────────────────────── -->
+<section class="sec" id="sistema">
+  <p class="label reveal">03 — Sistema</p>
+  <h2 class="reveal d1" style="font-size:clamp(30px,4.4vw,56px);margin-top:18px">Lo que hay debajo.</h2>
+  <div class="rows">
+    <div class="row reveal">
+      <span class="label">Entrega</span>
+      <span class="nm">HLS incremental sobre B2</span>
+      <span class="ct">2 s por segmento</span>
+    </div>
+    <div class="row reveal">
+      <span class="label">Proveedores</span>
+      <span class="nm">Failover en cadena</span>
+      <span class="ct">4 proveedores</span>
+    </div>
+    <div class="row reveal">
+      <span class="label">Revisión</span>
+      <span class="nm">AgentLoop con juez de visión</span>
+      <span class="ct">relanza la escena</span>
+    </div>
+    <div class="row reveal">
+      <span class="label">Custodia</span>
+      <span class="nm">Object Lock GOVERNANCE</span>
+      <span class="ct">30 días</span>
+    </div>
+    <div class="row reveal">
+      <span class="label">Procedencia</span>
+      <span class="nm">Manifest embebido y verificable</span>
+      <span class="ct">genblaze verify</span>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── medidas ─────────────────────────── -->
+<section class="sec" id="medidas">
+  <p class="label reveal">04 — Medidas</p>
+  <h2 class="reveal d1" style="font-size:clamp(30px,4.4vw,56px);margin-top:18px">Cuatro ejecuciones reales.</h2>
+  <table class="tbl reveal d2">
+    <thead>
+      <tr><th>Spot</th><th>Escenas</th><th>Primer fotograma</th><th>Render completo</th><th>Antes en pantalla</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Aeron Runner</td>
+        <td data-h="Escenas">3</td><td data-h="Primer fotograma">5,8 s</td>
+        <td data-h="Render completo">24,7 s</td><td data-h="Antes"><b>4,3×</b></td>
+      </tr>
+      <tr>
+        <td>Nova Buds</td>
+        <td data-h="Escenas">3</td><td data-h="Primer fotograma">6,4 s</td>
+        <td data-h="Render completo">25,8 s</td><td data-h="Antes"><b>4,1×</b></td>
+      </tr>
+      <tr>
+        <td>Serum facial</td>
+        <td data-h="Escenas">3</td><td data-h="Primer fotograma">9,8 s</td>
+        <td data-h="Render completo">1:44</td><td data-h="Antes"><b>10,6×</b></td>
+      </tr>
+      <tr>
+        <td>Café de especialidad</td>
+        <td data-h="Escenas">4</td><td data-h="Primer fotograma">8,0 s</td>
+        <td data-h="Render completo">1:40</td><td data-h="Antes"><b>12,5×</b></td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="label reveal" style="margin-top:22px">Medido en el propio panel, bucket genblaze-review-migarci2</p>
+</section>
+
+<!-- ─────────────────────────── cierre ─────────────────────────── -->
+<section class="sec close">
+  <h2 class="reveal">Deja de esperar<br>al render.</h2>
+  <div class="acts reveal d1">
+    <a class="pill solid" href="/">Abrir la sala de revisión</a>
+    <a class="pill" href="#top">Volver arriba</a>
+  </div>
+  <p class="fine reveal d1">Todas las cifras de esta página salen de ejecuciones reales del panel.
+    Los fotogramas son salida directa del pipeline, sin retoque.</p>
+
+  <div class="strip">
+    <span class="label">FirstFrame — sala de revisión</span>
+    <span class="label">Genblaze 0.4.5 · Backblaze B2 · eu-central-003</span>
+  </div>
+  <div class="bigmark" aria-hidden="true">FIRSTFRAME</div>
+</section>
+
+<script src="/landing.js?v=1"></script>
+</body>
+</html>
