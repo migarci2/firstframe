@@ -996,19 +996,36 @@ function loadDetail(id) {
 }
 
 var esRetry = 0;
+var esFails = 0;
+
+/* Si el SSE no llega a abrirse en varios intentos —detrás de un proxy que no
+ * deja pasar el stream, por ejemplo— dejamos de insistir: cada intento fallido
+ * escupe un error en la consola del navegador que no podemos silenciar. En su
+ * lugar se cae a un sondeo de /api/jobs, que mantiene la sala viva igual. */
+function pollJobs() {
+  if (pollJobs.on) return;
+  pollJobs.on = setInterval(function () {
+    api('/api/jobs').then(function (d) {
+      S.jobs = d.jobs || [];
+      renderJobs();
+      if (S.sel) { renderStage(); renderRail(); loadDetail(S.sel); }
+    }).catch(function () {});
+  }, 4000);
+}
 
 function connectSSE() {
   var es;
   try { es = new EventSource('/api/events'); }
-  catch (e) { return; }
+  catch (e) { pollJobs(); return; }
 
   var TYPES = ['hello', 'job_update', 'render_started', 'segment_landed', 'scene_ready',
                'render_complete', 'provider_failover', 'judge_score', 'approved',
                'rejected', 'chaos', 'ping'];
 
-  es.onopen = function () { esRetry = 0; };
+  es.onopen = function () { esRetry = 0; esFails = 0; };
   es.onerror = function () {
     try { es.close(); } catch (e) {}
+    if (++esFails >= 5) { pollJobs(); return; }
     esRetry = Math.min(esRetry + 1, 6);
     setTimeout(connectSSE, 500 * esRetry);
   };
