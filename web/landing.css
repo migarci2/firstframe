@@ -261,8 +261,8 @@ h1 em { font-style: normal; color: var(--coral); }
 /* ───────────────────────────── secciones ───────────────────────────── */
 
 section { position: relative; }
-.sec { padding: 110px 0; }
-.sec-tight { padding: 78px 0; }
+.sec { padding: 84px 0; }
+.sec-tight { padding: 64px 0; }
 
 .kicker {
   font-family: var(--mono);
@@ -290,35 +290,99 @@ h2 {
 }
 .lede b { color: var(--ink); font-weight: 550; }
 
-/* ───────────────────────────── cifras ───────────────────────────── */
+/* ─────────────────────── la carrera (scrollytelling) ───────────────────────
+ * Una sección alta con el contenido pegado: al bajar, el reloj avanza de 0 a
+ * 22,8 s y las dos barras corren. La de arriba termina a los 5,4 s y se queda
+ * encendida mientras la otra sigue. Toda la tesis del producto sin un párrafo.
+ */
 
-.stats {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 1px; margin-top: 48px;
-  background: var(--line-2);
-  border: 1px solid var(--line-2);
-  border-radius: 14px; overflow: hidden;
+.race { position: relative; height: 320vh; }
+.race-sticky {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; align-items: center;
+  overflow: hidden;
 }
-.stat { background: var(--bg); padding: 30px 26px; }
-.stat .v {
-  font-size: clamp(32px, 4.4vw, 46px); font-weight: 620;
-  letter-spacing: -.04em; line-height: 1;
+.race-sticky::before {
+  content: ''; position: absolute; left: 50%; top: 50%; z-index: -1;
+  width: 780px; height: 200px; transform: translate(-50%,-50%) rotate(-6deg);
+  border-radius: 120px;
+  background: linear-gradient(96deg, #FF3B26, #FF9178);
+  filter: blur(90px);
+  opacity: calc(.12 + var(--lit, 0) * .3);
+  transition: opacity .5s ease;
+}
+
+.clock {
+  text-align: center;
+  font-size: clamp(64px, 12vw, 148px);
+  font-weight: 630; letter-spacing: -.055em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+  margin: 22px 0 44px;
+}
+.clock i {
+  font-style: normal; font-size: .34em; font-weight: 500;
+  color: var(--ink-3); margin-left: .12em; letter-spacing: -.02em;
+}
+
+.tracks { display: grid; gap: 26px; max-width: 760px; margin: 0 auto; }
+
+.track-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 11px;
+}
+.track-name { font-size: 14.5px; color: var(--ink-2); letter-spacing: -.01em; }
+.track-val {
+  font-family: var(--mono); font-size: 14px; color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-.stat.hot .v { color: var(--coral); }
-.stat .k {
-  margin-top: 12px; font-size: 13.5px; color: var(--ink-2);
+
+.bar {
+  height: 10px; border-radius: 99px;
+  background: rgba(255,255,255,.07);
+  overflow: hidden;
 }
-.stat .d {
-  margin-top: 6px; font-family: var(--mono); font-size: 11px;
-  letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3);
+.bar i {
+  display: block; height: 100%; width: 0; border-radius: 99px;
+  background: rgba(255,255,255,.34);
+}
+.track-note {
+  margin-top: 9px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+
+/* la pista del primer fotograma, una vez llega */
+#tr-first.done .track-name { color: var(--ink); }
+#tr-first.done .track-val  { color: var(--coral); }
+#tr-first.done .bar i      { background: linear-gradient(90deg, #FF3B26, #FF9178); }
+#tr-first.done .track-note { color: var(--coral); }
+
+#tr-full.done .track-val { color: var(--ink-2); }
+
+.race-punch {
+  margin: 52px auto 0; text-align: center;
+  font-size: clamp(17px, 2vw, 22px); color: var(--ink-3);
+  letter-spacing: -.015em;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .5s ease, transform .5s ease;
+}
+.race-punch.on { opacity: 1; transform: none; }
+.race-punch b {
+  color: var(--ink); font-weight: 620;
+  font-size: 1.5em; letter-spacing: -.04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race { height: auto; }
+  .race-sticky { position: static; height: auto; padding: 90px 0; }
+  .race-punch { opacity: 1; transform: none; }
 }
 
 /* ───────────────────────────── tarjetas ───────────────────────────── */
 
 .cards {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
-  margin-top: 52px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  margin-top: 48px;
 }
 .card {
   position: relative;
@@ -357,11 +421,14 @@ h2 {
 
 /* ───────────────────────────── bloques alternos ───────────────────────────── */
 
+/* La captura manda: se lleva la columna ancha en los dos sentidos. Al voltear
+ * hay que voltear también los anchos, o el segundo bloque sale encogido. */
 .split {
-  display: grid; grid-template-columns: minmax(0,.85fr) minmax(0,1.15fr);
-  gap: clamp(32px, 5vw, 72px); align-items: center;
+  display: grid; grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr);
+  gap: clamp(28px, 4vw, 56px); align-items: center;
 }
-.split + .split { margin-top: 110px; }
+.split + .split { margin-top: 96px; }
+.split.flip { grid-template-columns: minmax(0,1.28fr) minmax(0,.72fr); }
 .split.flip > .split-txt { order: 2; }
 .split-txt h2 { font-size: clamp(26px, 3.1vw, 36px); max-width: 16ch; }
 .split-txt .lede { font-size: 16px; max-width: 44ch; }
@@ -380,22 +447,6 @@ h2 {
 .facts b { color: var(--ink); font-weight: 550; }
 .facts code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
 
-/* ───────────────────────────── tabla del sistema ───────────────────────────── */
-
-.rows { margin-top: 44px; border-top: 1px solid var(--line-2); }
-.row {
-  display: grid; grid-template-columns: 150px 1fr auto;
-  gap: 18px; align-items: baseline;
-  padding: 17px 4px;
-  border-bottom: 1px solid var(--line-2);
-}
-.row .l {
-  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--ink-3);
-}
-.row .n { font-size: 15.5px; color: var(--ink); letter-spacing: -.012em; }
-.row .v { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); text-align: right; }
-
 /* ───────────────────────────── cierre ───────────────────────────── */
 
 .close { padding: 130px 0 90px; text-align: center; position: relative; overflow: hidden; }
@@ -413,18 +464,12 @@ h2 {
 
 .foot {
   border-top: 1px solid var(--line-2);
-  padding: 30px 0 46px;
-  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
-  font-family: var(--mono); font-size: 11.5px; letter-spacing: .03em;
-  color: var(--ink-3);
+  padding: 26px 0 54px;
+  display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+  font-size: 12.5px; color: var(--ink-3);
 }
-.foot .sep { opacity: .4; }
 .foot .grow { flex: 1; }
-.foot-note {
-  max-width: var(--max); margin: 0 auto; padding: 0 var(--pad) 54px;
-  font-size: 12.5px; line-height: 1.6; color: var(--ink-3);
-}
-.foot-note b { color: var(--ink-2); font-weight: 500; }
+.foot .brand span { font-size: 13.5px; color: var(--ink-2); }
 
 /* ───────────────────────────── revelado ───────────────────────────── */
 
@@ -441,8 +486,8 @@ h2 {
 /* ───────────────────────────── adaptación ───────────────────────────── */
 
 @media (max-width: 960px) {
-  .cards { grid-template-columns: repeat(2, 1fr); }
-  .split { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
+  .split, .split.flip { grid-template-columns: 1fr; }
   .split.flip > .split-txt { order: 0; }
   .nav-links { display: none; }
 }
