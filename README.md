@@ -611,11 +611,19 @@ the judge on, the first frame goes to ~70 s. So the judge is real and it is wire
 real `AgentLoop`, and for a live demo it is switched off from the environment rather than
 removed from the code ([`server/jobs.py#L259-L268`](server/jobs.py#L259-L268)).
 
-**The live URL is not deployed yet.** `Dockerfile` and `fly.toml` are written and the
-deployment commands are in the header of `fly.toml`. Run it locally with the commands
-below; it needs no credentials.
+**The deployed instance runs `GEN_MODE=free` against a warm keyframe corpus.** Image
+generation is real (Pollinations, no card required); the motion on top of each still is
+Ken Burns rendered locally with ffmpeg, because no free generative *video* model exists
+today. The manifest says `kenburns-2.5d`, never `pixverse` — a run records what actually
+produced it.
 
-**The UI is in Spanish.** The code, the API and this document are in English.
+**Event Notifications are declared but not active.** B2 answers
+`400 bad_request: "API not enabled"` on this account, on both `b2_get_bucket_notification_rules`
+and `b2_set_...`, across v2/v3/v4 and both buckets. The five rules are written, validated
+locally for prefix-overlap legality, and printed by `infra/b2_setup.py`; the HMAC webhook
+receiver is implemented and unit-tested. What actually drives the room today is the
+adaptive poller, which emits the same internal events
+([`server/events.py`](server/events.py)).
 
 ---
 
