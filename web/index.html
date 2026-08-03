@@ -8,13 +8,23 @@
      (?v=) y el documento pide no cachearse. -->
 <meta http-equiv="Cache-Control" content="no-store">
 <title>FirstFrame</title>
-<link rel="stylesheet" href="/styles.css?v=14">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23040506'/><path d='M10 9h12v3.2H13.4v3.9h7.8v3.2h-7.8V24H10z' fill='%23ffffff'/></svg>">
+<link rel="stylesheet" href="/styles.css?v=15">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 
 <header class="top">
-  <div class="wordmark">FirstFrame<i>.</i></div>
+  <div class="wordmark">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <g fill="#FF6B5E">
+        <rect x="2" y="4" width="7" height="16" rx="1.4"/>
+        <rect x="11.4" y="4" width="3.6" height="16" rx="1" opacity=".62"/>
+        <rect x="16.9" y="4" width="2.2" height="16" rx=".8" opacity=".36"/>
+        <rect x="20.9" y="4" width="1.2" height="16" rx=".6" opacity=".2"/>
+      </g>
+    </svg>
+    <span>FirstFrame</span>
+  </div>
   <div class="topmeta" id="topmeta"></div>
   <button class="linkbtn" id="btn-rail" type="button" aria-expanded="true">Hide panel</button>
   <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Technical details</button>

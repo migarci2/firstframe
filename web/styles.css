@@ -35,8 +35,9 @@
 /* ───────────────────────── tokens ───────────────────────── */
 
 :root {
-  --canvas:   #040506;
-  --card:     #07080a;
+  /* Mismos tokens que la landing: la sala y la portada son el mismo producto. */
+  --canvas:   #08090a;
+  --card:     #0c0d0f;
   --recessed: #111214;
   --badge:    #1b1c1e;
 
@@ -45,10 +46,16 @@
   --smoke:    #6a6b6c;
   --mist:     #e6e6e6;
   --iron:     #454647;
-  --border:   #363739;
+  --border:   #303133;
 
-  /* Coral es MARCA, no color funcional: solo el logotipo. */
-  --coral:    #ff6363;
+  /* Coral es la marca Y la acción principal, igual que en la landing: el mismo
+   * botón que abre la sala es el que aprueba el spot. Antes también hacía de
+   * color de error, y no puede ser las dos cosas — el error vive en --bad. */
+  --coral:    #ff6b5e;
+  --coral-2:  #ff9178;
+  --coral-in: #1a0705;   /* tinta sobre coral, 12:1 */
+
+  --bad:      #ff4d4d;
   /* Los estados van casi mudos; solo llevan color los dos que importan. */
   --ok:       #59d499;
   --info:     #56c2ff;
@@ -166,7 +173,7 @@ button { cursor: pointer; }
 .jobrow span.t-live  { color: var(--ash); }
 .jobrow span.t-ready { color: var(--white); }
 .jobrow span.t-good  { color: var(--ok); }
-.jobrow span.t-bad   { color: var(--coral); }
+.jobrow span.t-bad   { color: var(--bad); }
 
 .side-empty { font-size: 13px; color: var(--smoke); padding: 8px 16px; line-height: 1.5; }
 
@@ -270,24 +277,38 @@ button { cursor: pointer; }
 .say { margin: 8px 0 0; color: var(--ash); font-size: 14px; letter-spacing: .014em; }
 .say b { color: var(--white); font-weight: 500; }
 .say.good { color: var(--ok); }
-.say.bad  { color: var(--coral); }
+.say.bad  { color: var(--bad); }
 
 .stageact { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 
-/* — botones: el sistema no tiene CTA cromático — */
+/* — botones: la misma píldora coral que la landing —
+ * El CTA es cromático a propósito y hay exactamente uno por pantalla: crear el
+ * spot, o aprobarlo. Todo lo demás es neutro y no compite. */
 
 .primary, .ghost {
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px; font-weight: 500; letter-spacing: .008em;
-  transition: background .15s, color .15s;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px; font-weight: 550; letter-spacing: -.005em;
+  transition: background .15s, color .15s, border-color .15s, transform .15s;
 }
-.primary { background: var(--mist); border: 0; color: var(--iron); }
-.primary:hover { background: var(--white); }
+.primary:active, .ghost:active { transform: translateY(1px); }
+
+.primary {
+  background: var(--coral); border: 1px solid var(--coral);
+  color: var(--coral-in); font-weight: 600;
+}
+.primary:hover { background: var(--coral-2); border-color: var(--coral-2); }
 .primary:disabled { opacity: .4; cursor: default; }
-.primary.big { padding: 10px 16px; font-size: 14px; }
-.ghost { background: rgba(255,255,255,.05); border: 0; color: var(--white); }
-.ghost:hover { background: rgba(255,255,255,.09); }
+.primary:disabled:hover { background: var(--coral); border-color: var(--coral); }
+.primary.big { padding: 11px 22px; font-size: 14px; }
+
+.ghost {
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.09);
+  color: var(--white);
+}
+.ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16); }
 
 .iconbtn {
   background: none; border: 0; color: var(--smoke);
@@ -425,12 +446,12 @@ button { cursor: pointer; }
   max-height: 180px; overflow: auto;
 }
 .verify-out.ok  { color: var(--ok); }
-.verify-out.bad { color: var(--coral); }
+.verify-out.bad { color: var(--bad); }
 
 .iter { border-radius: 8px; background: var(--recessed); padding: 12px; margin-bottom: 8px; font-size: 13px; color: var(--ash); }
 .iter-top { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--smoke); display: flex; gap: 8px; margin-bottom: 8px; }
 .iter-top .sc { margin-left: auto; color: var(--ok); }
-.iter-top .sc.low { color: var(--coral); }
+.iter-top .sc.low { color: var(--bad); }
 .iter-bar { height: 1px; background: var(--border); margin: 8px 0; }
 .iter-bar i { display: block; height: 100%; background: var(--coral); }
 .iter-bar i.high { background: var(--ok); }
@@ -442,7 +463,7 @@ button { cursor: pointer; }
 .scenerow .ti { flex: 1; color: var(--ash); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scenerow .st { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--smoke); }
 .scenerow.ready .st  { color: var(--ok); }
-.scenerow.failed .st { color: var(--coral); }
+.scenerow.failed .st { color: var(--bad); }
 
 .feed { max-height: 320px; overflow-y: auto; }
 .feedrow { display: flex; gap: 8px; font-family: var(--mono); font-size: 12px; line-height: 1.6; letter-spacing: .017em; color: var(--ash); }
@@ -455,7 +476,7 @@ button { cursor: pointer; }
 .chaosrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-family: var(--mono); font-size: 12px; letter-spacing: .017em; }
 .chaosrow .nm { flex: 1; color: var(--ash); }
 .chaosrow .state { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--ok); }
-.chaosrow .state.dead { color: var(--coral); }
+.chaosrow .state.dead { color: var(--bad); }
 .chaosrow button { margin: 0; }
 
 .tnote { font-size: 13px; color: var(--smoke); line-height: 1.6; }
@@ -476,7 +497,7 @@ button { cursor: pointer; }
 .toast.out { opacity: 0; transition: opacity .2s; }
 .toast.good small { color: var(--ok); }
 .toast.warn small { color: var(--info); }
-.toast.bad  small { color: var(--coral); }
+.toast.bad  small { color: var(--bad); }
 .toast small { display: block; font-weight: 400; font-size: 13px; color: var(--ash); margin-top: 4px; }
 
 /* ───────────────────────── raíl de ejecución ─────────────────────────

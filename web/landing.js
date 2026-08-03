@@ -35,8 +35,12 @@
 
   // ── la carrera ────────────────────────────────────────────────────
   // Las dos cifras medidas por la propia app: primer fotograma y render entero.
-  var FIRST = 5.4;
-  var FULL  = 22.8;
+  // Son de un job REAL que sigue vivo en la instancia desplegada (j_7a80df,
+  // 6 escenas), no de una ejecucion historica: un juez puede abrir la sala y
+  // comprobarlas. Si vuelves a sembrar la demo, actualiza estos dos numeros
+  // con los de un job que exista, o la landing prometera algo no verificable.
+  var FIRST = 7.8;
+  var FULL  = 30.3;
 
   var race    = $('race');
   var sticky  = race && race.querySelector('.race-sticky');
