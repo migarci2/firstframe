@@ -87,17 +87,21 @@
   }
 
   // ── el recorrido ──────────────────────────────────────────────────
-  // Cuatro pasos y cuatro capturas en el mismo hueco pegado. El paso activo
-  // sale de la posición de scroll dentro de la sección, así que subir apaga
-  // el que estaba encendido y vuelve al anterior.
+  // En pantalla hay UN paso: una frase y la captura que la demuestra, las dos
+  // en el mismo hueco pegado. El paso sale de la posición de scroll dentro de
+  // la sección, así que subir apaga el que estaba y devuelve el anterior.
   var flow  = $('flow');
-  var rail  = $('flow-steps');
   var steps = flow ? flow.querySelectorAll('.step') : [];
   var shots = flow ? flow.querySelectorAll('.shot') : [];
+  var ticks = flow ? flow.querySelectorAll('.flow-ticks i > b') : [];
   var lastStep = -1;
 
   function drawFlow(p, i) {
-    if (rail) rail.style.setProperty('--p', p.toFixed(4));
+    // Cada marca se rellena con el avance dentro de su propio tramo: el
+    // movimiento es continuo aunque el paso todavía no haya cambiado.
+    for (var t = 0; t < ticks.length; t++) {
+      ticks[t].style.setProperty('--f', clamp(p * ticks.length - t).toFixed(3));
+    }
     if (i === lastStep) return;
     lastStep = i;
     for (var n = 0; n < steps.length; n++) steps[n].classList.toggle('on', n === i);

@@ -408,31 +408,65 @@ h2 {
 .lead-p b { color: var(--ink); font-weight: 550; }
 
 /* ─────────────────────── el recorrido (scrollytelling) ───────────────────────
- * Una sección alta con el contenido pegado, igual que la carrera: los cuatro
- * pasos están siempre a la vista —el índice del recorrido— y sólo cambia cuál
- * está encendido. La captura vive en el mismo hueco y se releva con él.
- * Todo sale de la posición de scroll: al subir, se apaga y vuelve el anterior.
+ * Una sección alta con el contenido pegado, igual que la carrera. En pantalla
+ * hay UN paso, no cuatro: una frase y la captura que la demuestra. Al bajar,
+ * la frase se releva y la captura con ella. Lo que ya se ve en la captura —el
+ * tiempo del primer fotograma, los 30 días del bloqueo— no se escribe.
  */
 
-.flow { position: relative; height: 430vh; }
+.flow { position: relative; height: 440vh; }
 .flow-sticky {
   position: sticky; top: 0; height: 100vh;
   display: flex; align-items: center;
+  padding-top: 60px;            /* la barra fija no puede comerse las marcas */
 }
-.flow-grid {
-  display: grid;
-  grid-template-columns: minmax(240px, 27%) 1fr;
-  column-gap: clamp(26px, 3vw, 50px);
-  align-items: center;
+/* Texto y captura comparten caja: mismo borde izquierdo, y el bloque entero
+ * queda centrado en la pantalla sea cual sea el ancho de la ventana. */
+.flow-sticky .flow-grid {
+  display: flex; flex-direction: column;
+  gap: clamp(14px, 1.8vh, 24px);
+  /* 220px es lo que ocupan la barra fija, las marcas, la frase y los huecos:
+   * lo que sobra es el alto de la captura, y de ahí sale su ancho. */
+  max-width: min(var(--max-wide), calc((100vh - 220px) * 1.6 + var(--pad-wide) * 2));
 }
 
-/* La captura no puede pasarse del alto de la pantalla: se limita por ahí y la
- * columna de texto manda en el ancho. 16/10 es la proporción real del PNG. */
+/* Cuatro marcas, sin números: la activa se rellena con el scroll dentro de su
+ * propio tramo, así que el avance se ve aunque el paso no haya cambiado aún. */
+.flow-ticks { display: flex; gap: 7px; }
+.flow-ticks i {
+  display: block; width: 34px; height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,.12);
+  overflow: hidden;
+}
+.flow-ticks b {
+  display: block; height: 100%; border-radius: 2px;
+  background: var(--coral);
+  transform-origin: left; transform: scaleX(var(--f, 0));
+}
+
+/* Las cuatro frases comparten hueco: sólo la encendida se ve. Alto fijo en em
+ * para que el relevo no mueva la captura de sitio. */
+.flow-lines {
+  position: relative;
+  height: 2.5em;
+  font-size: clamp(21px, 2.4vw, 31px);
+}
+.step {
+  position: absolute; inset: 0; margin: 0;
+  max-width: 26ch;
+  line-height: 1.18; letter-spacing: -.028em; font-weight: 600;
+  color: var(--ink);
+  text-wrap: balance;
+  opacity: 0; transform: translateY(9px);
+  transition: opacity .4s ease, transform .4s ease;
+}
+.step.on { opacity: 1; transform: none; }
+
+/* La captura no puede pasarse del alto de la pantalla: se limita por ahí.
+ * 16/10 es la proporción real del archivo. */
 .flow-stack {
   position: relative;
   width: 100%;
-  max-width: calc((100vh - 170px) * 1.6);
-  margin-left: auto;
   aspect-ratio: 16 / 10;
 }
 .shot {
@@ -442,51 +476,6 @@ h2 {
 }
 .shot.on { opacity: 1; transform: none; }
 .shot img { width: 100%; height: 100%; object-fit: cover; }
-
-.flow-steps {
-  position: relative;
-  margin: 0; padding: 4px 0 4px clamp(20px, 2vw, 28px);
-  list-style: none;
-  border-left: 1px solid var(--line-2);
-  display: grid; gap: clamp(20px, 2.6vh, 30px);
-}
-/* El carril se rellena con la posición de scroll. Escala vertical: se compone
- * en la GPU y no obliga a rehacer el layout en cada fotograma. */
-.flow-steps::before {
-  content: ''; position: absolute; left: -1px; top: 0;
-  width: 2px; height: 100%; border-radius: 2px;
-  background: linear-gradient(180deg, var(--coral), var(--coral-2));
-  transform-origin: top; transform: scaleY(var(--p, 0));
-}
-
-.step-n {
-  display: block;
-  font-family: var(--mono);
-  font-size: 11px; letter-spacing: .11em; text-transform: uppercase;
-  color: var(--ink-3);
-  transition: color .35s ease;
-}
-.step h3 {
-  margin: 9px 0 0;
-  font-size: clamp(18px, 1.55vw, 22px);
-  line-height: 1.2; letter-spacing: -.022em; font-weight: 600;
-  color: var(--ink-3);
-  text-wrap: pretty;
-  transition: color .35s ease;
-}
-.step p {
-  margin: 8px 0 0; max-width: 42ch;
-  font-size: 14.5px; line-height: 1.5; color: var(--ink-3);
-  opacity: .5;
-  text-wrap: pretty;
-  transition: opacity .35s ease, color .35s ease;
-}
-.step p b { color: inherit; font-weight: 600; }
-
-.step.on .step-n { color: var(--coral); }
-.step.on h3     { color: var(--ink); }
-.step.on p      { color: var(--ink-2); opacity: 1; }
-.step.on p b    { color: var(--ink); }
 
 /* ───────────────────────────── cierre ───────────────────────────── */
 
@@ -548,26 +537,23 @@ h2 {
 /* La sección se aplana a paso · captura · paso · captura, en orden y con todo
  * a la vista. display: contents saca los envoltorios del layout, y así se
  * pueden intercalar con order sin duplicar una sola imagen. */
+/* La sección se aplana a frase · captura · frase · captura, en orden y con todo
+ * a la vista. display: contents saca los envoltorios del layout, y así se
+ * pueden intercalar con order sin duplicar una sola imagen. */
 .flow.flow-flat { height: auto; }
 .flow-flat .flow-sticky { position: static; height: auto; padding: 20px 0 50px; }
-.flow-flat .flow-grid {
-  display: flex; flex-direction: column;
-  gap: clamp(30px, 4vw, 52px);
-}
-.flow-flat .flow-steps, .flow-flat .flow-stack { display: contents; }
+.flow-flat .flow-sticky .flow-grid { gap: clamp(28px, 4vw, 48px); max-width: var(--max-wide); }
+.flow-flat .flow-ticks { display: none; }
+.flow-flat .flow-lines, .flow-flat .flow-stack { display: contents; }
 .flow-flat .shot {
   position: static; opacity: 1; transform: none;
   aspect-ratio: auto; transition: none;
 }
 .flow-flat .shot img { height: auto; }
 .flow-flat .step {
-  border-left: 1px solid var(--line-2);
-  padding-left: clamp(20px, 2vw, 28px);
+  position: static; opacity: 1; transform: none;
+  font-size: clamp(21px, 2.6vw, 28px); max-width: 24ch;
 }
-.flow-flat .step .step-n { color: var(--coral); }
-.flow-flat .step h3 { font-size: clamp(21px, 2.6vw, 27px); color: var(--ink); }
-.flow-flat .step p  { color: var(--ink-2); opacity: 1; max-width: 60ch; }
-.flow-flat .step p b { color: var(--ink); }
 
 .flow-flat .step:nth-of-type(1) { order: 1 } .flow-flat .shot:nth-of-type(1) { order: 2 }
 .flow-flat .step:nth-of-type(2) { order: 3 } .flow-flat .shot:nth-of-type(2) { order: 4 }
@@ -580,24 +566,18 @@ h2 {
 
   .flow { height: auto; }
   .flow-sticky { position: static; height: auto; padding: 30px 0 60px; }
-  .flow-grid {
-    display: flex; flex-direction: column;
-    gap: clamp(30px, 4vw, 52px);
-  }
-  .flow-steps, .flow-stack { display: contents; }
+  .flow-sticky .flow-grid { gap: clamp(28px, 4vw, 48px); max-width: var(--max-wide); }
+  .flow-ticks { display: none; }
+  .flow-lines, .flow-stack { display: contents; }
   .shot {
     position: static; opacity: 1; transform: none;
     aspect-ratio: auto; transition: none;
   }
   .shot img { height: auto; }
   .step {
-    border-left: 1px solid var(--line-2);
-    padding-left: clamp(20px, 2vw, 28px);
+    position: static; opacity: 1; transform: none;
+    font-size: clamp(21px, 2.6vw, 28px); max-width: 24ch;
   }
-  .step .step-n { color: var(--coral); }
-  .step h3 { font-size: clamp(21px, 2.6vw, 27px); color: var(--ink); }
-  .step p  { color: var(--ink-2); opacity: 1; max-width: 60ch; }
-  .step p b { color: var(--ink); }
 
   .step:nth-of-type(1) { order: 1 } .shot:nth-of-type(1) { order: 2 }
   .step:nth-of-type(2) { order: 3 } .shot:nth-of-type(2) { order: 4 }
@@ -607,31 +587,25 @@ h2 {
 
 /* ───────────────────────────── adaptación ───────────────────────────── */
 
-/* Por debajo de 900 px la columna de texto estrangularía la captura: la sección
- * se aplana y cada paso lleva la suya debajo. Misma lectura, sin pegados. */
+/* Por debajo de 900 px una captura de interfaz pegada no se lee: la sección se
+ * aplana y cada frase lleva la suya debajo. Misma lectura, sin pegados. */
 @media (max-width: 900px) {
   .nav-links { display: none; }
 
   .flow { height: auto !important; }
   .flow-sticky { position: static; height: auto; padding: 20px 0 50px; }
-  .flow-grid {
-    display: flex; flex-direction: column;
-    gap: clamp(30px, 4vw, 48px);
-  }
-  .flow-steps, .flow-stack { display: contents; }
+  .flow-sticky .flow-grid { gap: clamp(26px, 4vw, 44px); max-width: var(--max-wide); }
+  .flow-ticks { display: none; }
+  .flow-lines, .flow-stack { display: contents; }
   .shot {
     position: static; opacity: 1; transform: none;
     aspect-ratio: auto; transition: none;
   }
   .shot img { height: auto; }
   .step {
-    border-left: 1px solid var(--line-2);
-    padding-left: 20px;
+    position: static; opacity: 1; transform: none;
+    font-size: clamp(21px, 3.2vw, 27px); max-width: 24ch;
   }
-  .step .step-n { color: var(--coral); }
-  .step h3 { font-size: clamp(21px, 3vw, 26px); color: var(--ink); }
-  .step p  { color: var(--ink-2); opacity: 1; max-width: none; }
-  .step p b { color: var(--ink); }
 
   .step:nth-of-type(1) { order: 1 } .shot:nth-of-type(1) { order: 2 }
   .step:nth-of-type(2) { order: 3 } .shot:nth-of-type(2) { order: 4 }

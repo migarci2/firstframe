@@ -7,7 +7,7 @@
 <title>FirstFrame — watch the spot before it finishes rendering</title>
 <meta name="description" content="FirstFrame streams every scene as it is generated, so the first reviewable frame lands in seconds instead of at the end of the render.">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/landing.css?v=40">
+<link rel="stylesheet" href="/landing.css?v=44">
 </head>
 <body>
 
@@ -102,31 +102,16 @@
   <div class="flow-sticky">
     <div class="wrap wide flow-grid">
 
-      <ol class="flow-steps" id="flow-steps">
-        <li class="step on">
-          <span class="step-n">01 — Generating</span>
-          <h3>Three scenes play while the fourth does not exist yet.</h3>
-          <p>First frame at <b>8.8 s</b>, mid-render. The badge still reads GENERATING.</p>
-        </li>
+      <div class="flow-ticks" id="flow-ticks" aria-hidden="true">
+        <i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i>
+      </div>
 
-        <li class="step">
-          <span class="step-n">02 — Ready for review</span>
-          <h3>The render lands and the timeline fills in.</h3>
-          <p>Three scenes, <b>40.7 s</b> of render. Same link, same player — nothing was re-sent.</p>
-        </li>
-
-        <li class="step">
-          <span class="step-n">03 — Request changes</span>
-          <h3>Send it back in plain words.</h3>
-          <p>Pick the scene, say what is wrong. The new take replaces it in place.</p>
-        </li>
-
-        <li class="step">
-          <span class="step-n">04 — Approved</span>
-          <h3>Approving is what makes it undeletable.</h3>
-          <p>An <b>Object Lock</b> in GOVERNANCE mode: 30 days, no delete, no overwrite.</p>
-        </li>
-      </ol>
+      <div class="flow-lines">
+        <p class="step on">Three scenes play while the fourth does not exist yet.</p>
+        <p class="step">The render lands and the timeline fills in.</p>
+        <p class="step">Send it back in plain words.</p>
+        <p class="step">Approving is what makes it undeletable.</p>
+      </div>
 
       <div class="flow-stack">
         <figure class="frame shot on">
@@ -179,6 +164,6 @@
   </footer>
 </div>
 
-<script src="/landing.js?v=36"></script>
+<script src="/landing.js?v=37"></script>
 </body>
 </html>
