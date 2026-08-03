@@ -161,9 +161,14 @@
     return m + ':' + (r < 10 ? '0' : '') + (Math.round(r * 10) / 10).toFixed(1).replace(/\.0$/, '');
   }
 
+  // Por defecto la demo va sola, sin backend. Con ?job=j_xxx se engancha a un
+  // job de verdad y "Apply cut" persiste contra /api/jobs/{id}/edl.
+  var liveJob = new URLSearchParams(location.search).get('job');
+
   var ed = FFEditor.mount(document.getElementById('editor'), {
     scenes: scenes,
-    persist: false,                 // demo autónoma: sin backend
+    jobId: liveJob,
+    persist: !!liveJob,
     onChange: function (edl, meta) {
       log(meta.kind, 'scene ' + (meta.scene == null ? '—' : meta.scene) +
           ' · cut is now ' + fmt(meta.duration) +
@@ -240,6 +245,26 @@
   stats();
   log('ready', 'FFEditor ' + FFEditor.version + ' · Sortable ' +
       (window.Sortable ? window.Sortable.version : 'MISSING') + ' · ' + scenes.length + ' scenes');
+
+  if (liveJob) {
+    log('live', 'job ' + liveJob + ' — loading its scenes and EDL from the API');
+    fetch('/api/jobs/' + encodeURIComponent(liveJob))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.scenes) throw new Error('job has no scenes');
+        scenes = j.scenes;
+        ed.setScenes(scenes);
+        return FFEditor.load(liveJob);
+      })
+      .then(function (edl) {
+        if (edl && edl.length) ed.setEDL(edl);
+        log('live', 'loaded ' + scenes.length + ' scenes · Apply cut now writes to the server');
+        stats();
+      })
+      .catch(function (e) { log('live', 'failed: ' + e.message + ' — staying on sample data'); });
+  } else {
+    log('hint', 'append ?job=<id> to the URL to drive a real job through the API');
+  }
 })();
 </script>
 </body>

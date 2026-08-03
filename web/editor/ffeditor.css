@@ -242,20 +242,33 @@
 
 /* ─────────────────────────── arrastre (Sortable) ─────────────────────────── */
 
+/* El hueco donde va a caer el clip. Se ve el sitio, no el contenido. */
 .ffed-ghost {
-  opacity: .3;
-  background: rgba(255,107,94,.12) !important;
-  box-shadow: inset 0 0 0 1px var(--ffed-coral) !important;
+  background: rgba(255,107,94,.10) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,107,94,.55) !important;
 }
-.ffed-ghost .ffed-body { opacity: 0; }
+.ffed-ghost .ffed-body,
+.ffed-ghost::after { opacity: 0; }
 
 .ffed-chosen { z-index: 5; }
 
-.ffed-drag {
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 12px 28px rgba(0,0,0,.6) !important;
+/* El clip que va pegado al cursor. Sortable lo mete DENTRO de la pista, así que
+ * tiene que ser opaco de verdad: con cualquier transparencia se leen los dos
+ * textos superpuestos y parece un fallo de pintado. */
+.ffed-drag,
+.ffed-track > .sortable-fallback {
+  z-index: 20 !important;
+  opacity: 1 !important;
+  background: #23252a !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.4),
+              inset 3px 0 0 0 var(--ffed-coral),
+              0 14px 30px rgba(0,0,0,.65) !important;
   cursor: grabbing !important;
-  opacity: .95;
 }
+.ffed-drag .ffed-name,
+.ffed-track > .sortable-fallback .ffed-name { color: var(--ffed-white); }
+.ffed-drag::after,
+.ffed-track > .sortable-fallback::after { display: none; }
 .ffed.ffed-reordering .ffed-h { pointer-events: none; }
 
 /* ─────────────────────────────── playhead ─────────────────────────────── */
