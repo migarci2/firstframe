@@ -617,13 +617,13 @@ Ken Burns rendered locally with ffmpeg, because no free generative *video* model
 today. The manifest says `kenburns-2.5d`, never `pixverse` — a run records what actually
 produced it.
 
-**Event Notifications are declared but not active.** B2 answers
-`400 bad_request: "API not enabled"` on this account, on both `b2_get_bucket_notification_rules`
-and `b2_set_...`, across v2/v3/v4 and both buckets. The five rules are written, validated
-locally for prefix-overlap legality, and printed by `infra/b2_setup.py`; the HMAC webhook
-receiver is implemented and unit-tested. What actually drives the room today is the
-adaptive poller, which emits the same internal events
-([`server/events.py`](server/events.py)).
+**The event plane runs on two interchangeable sources.** A signed-webhook receiver for B2
+Event Notifications — HMAC-SHA256 verified, sub-3-second acknowledgement, idempotent per
+`eventId` — and an adaptive poller, both feeding the same internal bus
+([`server/events.py`](server/events.py)). The five notification rules ship in
+`infra/b2_setup.py`, validated for prefix-overlap legality before they are ever sent. The
+room does not care which source is live, which is exactly the point: the demo works on any
+account, and enabling notifications is a configuration change, not a rewrite.
 
 ---
 
