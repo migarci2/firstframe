@@ -11,8 +11,14 @@ import {campaign as C} from './campaign';
 
 const T = C.theme;
 
-/** Fade + desplazamiento de entrada, en función del frame local del Sequence. */
-const useEnter = (delay = 0, dur = 12) => {
+/**
+ * Fade + desplazamiento de entrada, en función del frame local del Sequence.
+ *
+ * `dur` es corto a propósito: con 12 fotogramas y los retardos encadenados,
+ * cada corte abría con medio segundo de negro absoluto — seis cortes, dos
+ * segundos y medio de los quince en nada. Con 8 el corte respira sin morir.
+ */
+const useEnter = (delay = 0, dur = 8) => {
   const f = useCurrentFrame() - delay;
   const o = interpolate(f, [0, dur], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const y = interpolate(f, [0, dur], [14, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
@@ -85,7 +91,7 @@ const Head: React.FC<{children: React.ReactNode; delay?: number; size?: number}>
   </h1>
 );
 
-const Sub: React.FC<{children: React.ReactNode; delay?: number}> = ({children, delay = 0}) => (
+const Sub: React.FC<{children: React.ReactNode; delay?: number}> = ({children, delay = 3}) => (
   <p
     style={{
       ...useEnter(delay),
@@ -132,7 +138,10 @@ const Counter: React.FC<{to: number; frames: number; suffix?: string; size?: num
 /** Las dos barras corriendo: el argumento entero en una imagen. */
 const Race: React.FC = () => {
   const f = useCurrentFrame();
-  const {fps} = useVideoConfig();
+  const {fps, width, height} = useVideoConfig();
+  // En vertical y cuadrado el lienzo es estrecho: 62% deja las barras flotando
+  // en el centro de un frame muy alto. Se ensanchan para que llenen la lectura.
+  const raceWidth = width >= height ? '62%' : '84%';
   const t = (f / fps) * (C.proof.fullRenderSeconds / 3.2); // 3.2 s de vídeo = 30.3 s reales
   const pFirst = Math.min(1, t / C.proof.firstFrameSeconds);
   const pFull = Math.min(1, t / C.proof.fullRenderSeconds);
@@ -174,7 +183,7 @@ const Race: React.FC = () => {
   );
 
   return (
-    <div style={{width: '62%'}}>
+    <div style={{width: raceWidth}}>
       <div style={{marginBottom: 44, opacity: 0.9}}>
         <Counter to={C.proof.fullRenderSeconds} frames={3.2 * 30} size={150} />
       </div>
@@ -204,7 +213,7 @@ export const Ad: React.FC = () => {
       <Sequence durationInFrames={s(2.5)}>
         <Stage>
           <Head>{C.copy.hook}</Head>
-          <Head delay={6}>{C.copy.hookLine2}</Head>
+          <Head delay={5}>{C.copy.hookLine2}</Head>
         </Stage>
       </Sequence>
 
@@ -212,7 +221,7 @@ export const Ad: React.FC = () => {
       <Sequence from={s(2.5)} durationInFrames={s(2.5)}>
         <Stage>
           <Kicker>The old way</Kicker>
-          <Sub delay={4}>{C.copy.problem}</Sub>
+          <Sub delay={3}>{C.copy.problem}</Sub>
         </Stage>
       </Sequence>
 
@@ -236,7 +245,7 @@ export const Ad: React.FC = () => {
       <Sequence from={s(11)} durationInFrames={s(2)}>
         <Stage>
           <Kicker>Keep</Kicker>
-          <Sub delay={4}>{C.copy.keep}</Sub>
+          <Sub delay={3}>{C.copy.keep}</Sub>
         </Stage>
       </Sequence>
 
@@ -245,7 +254,7 @@ export const Ad: React.FC = () => {
         <Stage>
           <Glow intensity={0.26} />
           <Head size={104}>{C.product}</Head>
-          <Sub delay={5}>{C.copy.cta}</Sub>
+          <Sub delay={3}>{C.copy.cta}</Sub>
         </Stage>
       </Sequence>
     </AbsoluteFill>
