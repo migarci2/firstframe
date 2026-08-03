@@ -53,16 +53,19 @@ JUNK_TITLE = re.compile(
 )
 
 # Lo que ve el juez. Briefs cortos: en cámara se leen enteros.
+# En ingles: el jurado del hackathon es de Backblaze y la submission va en ingles.
+# Y son briefs de PRODUCTO a proposito — el generador saca caras plastificadas en
+# cuanto el brief invita a poner una persona (ver docstring de pipeline/prompts.py).
 SEED_APPROVED = {
-    "title": "Aeron Runner — amanecer en la playa",
-    "brief": "Spot de 15 s de una zapatilla de running Aeron al amanecer en una playa "
-             "vacía: producto en primer plano, arena mojada, luz cálida rasante.",
+    "title": "Aeron Runner — dawn on the beach",
+    "brief": "15s spot of an Aeron running shoe at dawn on an empty beach: product in "
+             "the foreground, wet sand, warm raking light.",
     "scenes": 3,
 }
 SEED_IN_REVIEW = {
-    "title": "Nova Buds — producto flotando",
-    "brief": "Teaser de 15 s de unos auriculares Nova sobre fondo limpio: el producto "
-             "flota y gira lento, luz de estudio, cierre con el claim en pantalla.",
+    "title": "Nova Buds — floating product",
+    "brief": "15s teaser of Nova earbuds on a clean backdrop: the product floats and "
+             "turns slowly, studio light, closing on the claim.",
     "scenes": 3,
 }
 
