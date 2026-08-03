@@ -57,7 +57,6 @@ bottom one when the render finishes.</sub>
 [Repo map](#repo-map) ·
 [`docs/architecture.md`](docs/architecture.md) ·
 [`server/API.md`](server/API.md) ·
-[`VALIDACION.md`](VALIDACION.md) ·
 [`research/sdk-feedback.md`](research/sdk-feedback.md)
 
 ---
@@ -416,8 +415,7 @@ prompt through `feedback_fn`
 ([`pipeline/scenes.py#L422-L438`](pipeline/scenes.py#L422-L438)), and `AgentLoop` chains the
 iterations by `parent_run_id`.
 
-Two things about that judge are verified facts rather than preferences
-([`VALIDACION.md`](VALIDACION.md)). The content must be the OpenAI-style array with
+Two things about that judge are verified facts rather than preferences. The content must be the OpenAI-style array with
 `{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}`, because the inline
 `<img src="data:...">` style returns *wrong answers* (a pure red PNG described as "orange",
 then "grey"). And `nemotron-nano-12b-v2-vl` fails even with the correct format. The `demo()`
@@ -788,7 +786,7 @@ part 1 of 5 MiB already uploaded, `GetObject` with `Range` returns **404 NoSuchK
 signature) and in `before-sign` (inside it), across `CreateMultipartUpload`, `UploadPart` and
 `GetObject`. It is a paid feature ($15/TB of marked upload capacity) and this is a free
 account. So incremental HLS became the main architecture instead of the fallback, which in
-the end is the more portable design. Details in [`VALIDACION.md`](VALIDACION.md).
+the end is the more portable design. The probe script is in the repo and re-runnable.
 
 **Event Notifications are gated at the account level.** B2 returns `400 ... not enabled` when
 creating rules. The five rules are declared in `infra/b2_setup.py`, the signed webhook
@@ -850,7 +848,6 @@ web/          review room, vanilla HTML/JS/CSS, no build step
 scripts/      probes run against the real services before building on them
 docs/         architecture.md and the diagrams used in the docs
 research/     SDK dossier and the DX feedback write-up we sent upstream
-VALIDACION.md what we probed against the real services, and what came back
 ```
 
 ### Where to read what
@@ -859,6 +856,5 @@ VALIDACION.md what we probed against the real services, and what came back
 |---|---|
 | How does a brief become segments in a bucket? | [`docs/architecture.md`](docs/architecture.md) |
 | What does the HTTP surface look like? | [`server/API.md`](server/API.md) |
-| What did you actually test against the real APIs? | [`VALIDACION.md`](VALIDACION.md) |
 | What is wrong with the SDK and what did you send upstream? | [`research/sdk-feedback.md`](research/sdk-feedback.md) |
 | Is Live Read really unavailable? | [`scripts/probe_liveread.py`](scripts/probe_liveread.py) |
