@@ -548,7 +548,6 @@ h2 {
 .flow.flow-flat { height: auto; }
 .flow-flat .flow-sticky { position: static; height: auto; padding: 20px 0 50px; }
 .flow-flat .flow-sticky .flow-grid { gap: clamp(28px, 4vw, 48px); max-width: var(--max-wide); }
-.flow-flat ~ * .lead .wrap { max-width: var(--max-wide); }
 .flow-flat .flow-ticks { display: none; }
 .flow-flat .flow-lines, .flow-flat .flow-stack { display: contents; }
 .flow-flat .shot {
@@ -573,6 +572,7 @@ h2 {
   .flow { height: auto; }
   .flow-sticky { position: static; height: auto; padding: 30px 0 60px; }
   .flow-sticky .flow-grid { gap: clamp(28px, 4vw, 48px); max-width: var(--max-wide); }
+  .lead .wrap { max-width: var(--max-wide); }
   .flow-ticks { display: none; }
   .flow-lines, .flow-stack { display: contents; }
   .shot {
@@ -601,6 +601,7 @@ h2 {
   .flow { height: auto !important; }
   .flow-sticky { position: static; height: auto; padding: 20px 0 50px; }
   .flow-sticky .flow-grid { gap: clamp(26px, 4vw, 44px); max-width: var(--max-wide); }
+  .lead .wrap { max-width: var(--max-wide); }
   .flow-ticks { display: none; }
   .flow-lines, .flow-stack { display: contents; }
   .shot {
