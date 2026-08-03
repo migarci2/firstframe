@@ -33,9 +33,14 @@ Comprueba, en este orden:
 5. Ten preparado en un segundo escritorio: `PLAN.md §3` (layout del bucket) o el diagrama
    de arquitectura para el tramo 6.
 
-Cronómetro de referencia: el recorrido completo, medido con navegador headless, tarda
-**~2 min 5 s de acción real**. El resto del minuto es narración sobre planos fijos. Cabe
-holgadamente en 3:00.
+Cronómetro de referencia: el recorrido completo (tramos 2–5), medido dos veces con
+navegador headless, tarda **1 min 40 s – 2 min 10 s de acción real**. El resto es
+narración sobre planos fijos. Cabe en 3:00 con margen.
+
+La variación entre las dos pasadas viene del render: 4 escenas tardan **22 s con la
+máquina descansada y 36 s con ella cargada**. Antes de grabar, cierra lo que no
+necesites (navegadores, IDE, agentes) y haz una pasada en vacío para ver en cuál de los
+dos extremos estás.
 
 ---
 
@@ -57,8 +62,8 @@ holgadamente en 3:00.
 | **En pantalla** | La app en la URL viva, **con la barra de direcciones visible**. Pegas el brief, eliges 4 escenas, pulsas `New spot`. Aparece el job con badge rojo **`LIVE — generando escena 2 de 4`**, el player arranca con la cabecera `FirstFrame · LIVE`, y a los ~5 s entra la escena 1. El **FEED EN VIVO** de la derecha se llena de `SEGMENT_LANDED · b2:ObjectCreated`. Abajo, el panel grande: **`PRIMER FOTOGRAMA 5.1 s` vs `RENDER TOTAL 24 s` · `4.7× ANTES EN PANTALLA`**. |
 | **Se dice** | «Pego el brief y le doy a New spot. Cada escena que se genera se transcodifica, se corta en segmentos HLS y **cada segmento se sube a Backblaze B2 como un objeto independiente**, regenerando la playlist. A los cinco segundos Ana ya está viendo el segundo cero mientras la escena cuatro todavía se está generando. Cinco segundos contra veinticuatro: cuatro veces y media antes en pantalla.» |
 | **Comandos / clics** | 1) clic en el campo Brief, pegar: `spot de 15 s para la zapatilla Aeron: amanecer en una playa vacía, plano detalle del logo, cierre con claim`. 2) desplegable **ESCENAS → 4**. 3) clic en **New spot**. 4) no toques nada más: deja correr. |
-| **Tiempos reales** | playlist servible a **~1,0 s** del clic · primer fotograma en pantalla a **~4,4 s** del clic (el contador de la app marca `ff 5,1 s`, que cuenta desde la creación del job) · render de 4 escenas completo a **~22 s** del clic. |
-| **Duración** | 34 s — encaja justo. Si te sobra render, **puedes cortar en el montaje**: la barra de progreso llegando al final es un buen punto de corte. |
+| **Tiempos reales** | playlist servible a **~1,0 s** del clic · primer fotograma en pantalla a **4,4–5,3 s** del clic (el contador de la app marca `ff 5,1–6,1 s`, que cuenta desde la creación del job) · render de 4 escenas completo a **22–36 s** del clic según carga. |
+| **Duración** | 34 s. Si el render se te va a 36 s no cabe entero: **corta en el montaje** cuando la barra de progreso pase de la mitad y entra directo al tramo 3. El número final (`RENDER TOTAL`) se ve igualmente en el tramo 3. |
 
 > El primer job después de arrancar el servidor sale ~2 s más lento (imports en frío):
 > `ff 7,3 s`. Por eso `run_demo.sh` siembra dos jobs antes: cuando grabas, el intérprete
@@ -73,7 +78,7 @@ holgadamente en 3:00.
 | **En pantalla** | Escribes la nota de revisión y pulsas **Reject**. El badge cambia a **`LIVE — refinando la toma rechazada`**. El panel **AGENTLOOP** de la derecha se llena en tiempo real: `Rechazo de la productora: "el logo queda ilegible en el plano detalle"` → `AgentLoop: juez de visión → prompt refinado → escena relanzada` → `score 0.42` → `toma a rejected/ · AgentLoop relanza la escena`. El FEED marca `REJECTED` y `JUDGE_SCORE`. A los ~8 s aparece una **ESCENA 5 · «Escena 4 — toma refinada 1»** y el job vuelve a `IN REVIEW`. |
 | **Se dice** | «Rechazo en el segundo quince: “el logo queda ilegible en el plano detalle”. Esa nota entra literal en el prompt de la nueva pasada del AgentLoop. La toma mala baja a `rejected/` en el bucket, el run nuevo cuelga del anterior por `parent_run_id` —el manifest guarda la cadena entera— y **la toma refinada se añade a la misma playlist**, así que entra en vivo sin recargar nada.» |
 | **Comandos / clics** | 1) clic en el campo **Nota de revisión**, escribir `el logo queda ilegible en el plano detalle`. 2) desplegable **ESCENA → escena 2** (opcional; si lo dejas en «última» refina la última). 3) clic en **Reject**. |
-| **Tiempos reales** | panel AgentLoop lleno a **~3 s** del clic · toma refinada en la playlist y job en `in_review` a **~8,4 s**. |
+| **Tiempos reales** | panel AgentLoop lleno a **~3 s** del clic · toma refinada en la playlist y job en `in_review` a **8,4–12,9 s**. |
 | **Duración** | 28 s |
 
 > **Honestidad en la voz en off:** con la configuración de la demo (`JUDGE_THRESHOLD=0`)
@@ -103,15 +108,22 @@ holgadamente en 3:00.
 | **En pantalla** | Vuelves al job del tramo 3 y pulsas **Approve**. Toast verde: **`APROBADO · OBJECT LOCK GOVERNANCE` — `approved/{job}/final.mp4` retención hasta 2026-09-02`**, banda verde bajo los botones **`Object Lock GOVERNANCE · 30 días`**, y en el panel **PROVENANCE** la fila `lock GOVERNANCE hasta …`. Después pulsas **Verify** y el panel imprime el resultado del CLI: `✓ MANIFEST VERIFICADO (exit 0)`, `manifest: embebido en la caja uuid de genblaze`, `schema_version 1.5`, `canonical_hash …`, `hash_ok True`. |
 | **Se dice** | «Apruebo. El máster se concatena, se le **embebe el manifest de provenance dentro del propio MP4** —en la caja `uuid` de Genblaze— y se sube a `approved/` con **Object Lock GOVERNANCE a treinta días**. A partir de aquí ni una regla de lifecycle puede borrar esa versión. Y `genblaze verify` lo comprueba: hash canónico correcto, manifest embebido, entregable auditable.» |
 | **Comandos / clics** | 1) clic en el job del tramo 3 en la lista. 2) clic en **Approve**. 3) esperar el toast (~7 s). 4) clic en **Verify** (arriba a la derecha del panel PROVENANCE). |
-| **Tiempos reales** | approve completo (concat + embed + subida con lock) **~6,6 s** · verify: clic → panel relleno **~6 s** (di la frase del manifest mientras corre, no dejes silencio). |
+| **Tiempos reales** | approve completo (concat + embed + subida con Object Lock) **4,8–6,6 s** · verify: clic → panel relleno **6–9 s** (di la frase del manifest mientras corre, no dejes silencio). |
 | **Duración** | 34 s |
 
 > **Este es el tramo frágil.** El badge de Object Lock necesita una lectura
 > (`get_object_retention`, Class B) y la cuenta tiene el tope diario de transacciones
-> tocado. Mira el indicador del header: si pone **`B2 OK`**, adelante; si pone
-> **`B2 CAPPED`**, el badge puede no salir. Antes de esta toma:
-> `curl -s -X POST localhost:8000/api/health/reset-b2-stats` y aprueba **inmediatamente
-> después**. Si el badge no sale, la toma no vale: repítela. Verificado hoy: sale.
+> tocado: cuando el backend entra en enfriamiento por el cap, ni lo intenta y el badge
+> no sale (la subida sí ocurre — las subidas son Class A y funcionan).
+> **Receta verificada hoy, funcionó las dos veces:**
+> ```bash
+> curl -s -X POST localhost:8000/api/health/reset-b2-stats
+> ```
+> y pulsa **Approve** en los segundos siguientes. Mira el indicador del header: con
+> **`B2 OK`** adelante. Si sale `lock — (sin aprobar)` en el panel PROVENANCE, la toma no
+> vale: resetea el contador y repite con otro job en revisión.
+> (`demo/seed.py` hace este mismo reset antes de aprobar el job sembrado, por eso la sala
+> arranca con un `APPROVED` que ya tiene su `retain_until` de verdad.)
 
 ### 5-bis · plano opcional del juez de visión (solo si sobra tiempo, +12 s)
 
@@ -156,8 +168,10 @@ modo mock no genera producto real.
 | 6 | Arquitectura + cierre | 2:18 | 3:00 | 42 s |
 | | **Total** | | | **3:00** |
 
-Acción real cronometrada en la app (tramos 2–5): **~2 min 5 s**. El resto es narración
-sobre plano fijo y se ajusta en el montaje.
+Acción real cronometrada en la app (tramos 2–5), dos ensayos completos: **1:40** con la
+máquina descansada, **2:10** con ella cargada. El resto es narración sobre plano fijo y se
+ajusta en el montaje. En los dos ensayos la consola del navegador terminó **sin un solo
+error**.
 
 ---
 
@@ -181,8 +195,10 @@ sobre plano fijo y se ajusta en el montaje.
    contenido del vídeo. Nunca digas «mira qué spot ha salido».
 5. **El juez de visión dentro del flujo en vivo.** 48,7 s por llamada medidos. Va como
    inserto (5-bis) o no va.
-6. **El badge de Object Lock, si `/api/health` dice `b2_capped: true`.** Intermitente hoy.
-   Instrucciones para maximizar la probabilidad en el tramo 5.
+6. **El badge de Object Lock sin el reset previo del contador.** Con `b2_capped: true` el
+   backend ni intenta leer la retención y el badge no aparece, aunque el máster **sí** esté
+   subido y bloqueado. Con el reset de `/api/health/reset-b2-stats` justo antes sale — dos
+   de dos en los ensayos de hoy. Receta en el tramo 5.
 
 ---
 
