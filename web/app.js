@@ -94,6 +94,27 @@ function humanSecs(ms) {
   return out;
 }
 
+// "11.6 s", "1 min 03 s" — la cifra exacta, sin unidades de máquina.
+function secs(ms) {
+  if (ms == null || isNaN(ms)) return '—';
+  var s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + ' s';
+  var m = Math.floor(s / 60), r = Math.round(s % 60);
+  return m + ' min ' + (r < 10 ? '0' : '') + r + ' s';
+}
+
+// "3 Aug, 18:42" — fecha de persona, no epoch en milisegundos.
+function humanDate(ms) {
+  if (!ms) return '—';
+  var d = new Date(ms);
+  if (isNaN(d.getTime())) return '—';
+  var mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+  var same = d.getFullYear() === new Date().getFullYear();
+  return d.getDate() + ' ' + mon + (same ? '' : ' ' + d.getFullYear()) + ', ' +
+         String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
 function daysLeft(iso) {
   var d = Date.parse(iso);
   if (isNaN(d)) return 30;
@@ -511,7 +532,7 @@ function submitNewProject(e) {
 
   api('/api/projects', { method: 'POST', body: { name: name } })
     .then(function () { loadProjects(); })
-    .catch(function (err) { pushFeed('error', null, 'POST /api/projects: ' + err.message); });
+    .catch(function (err) { pushFeed('error', null, 'POST /api/projects: ' + err.message, 'the project could not be saved'); });
 }
 
 function loadProjects() {
@@ -747,11 +768,11 @@ function createSpot() {
     S.sel = null;
     select(job.id, { force: true });
     $('brief').value = '';
-    pushFeed('job_update', job.id, 'job created · pipeline started');
+    pushFeed('job_update', job.id, 'job created · pipeline started', 'spot created, generation started');
     loadProjects();
   }).catch(function (e) {
     toast('bad', 'We could not create the spot.', 'Try again in a few seconds.', 9000);
-    pushFeed('error', null, 'POST /api/jobs: ' + e.message);
+    pushFeed('error', null, 'POST /api/jobs: ' + e.message, 'the spot could not be created');
   }).then(function () {
     btn.disabled = false;
     btn.textContent = 'Create spot';
@@ -784,7 +805,7 @@ function decide(action, note, scene) {
         ? 'This spot is still rendering. Wait for it to finish.'
         : 'We could not save your decision. Try again.';
       toast('bad', msg, null, 9000);
-      pushFeed('error', job.id, 'decision ' + action + ': ' + e.message);
+      pushFeed('error', job.id, 'decision ' + action + ': ' + e.message, 'your decision was not saved');
       renderStage();
     });
 }
@@ -796,7 +817,7 @@ function download(job) {
   }).catch(function (e) {
     toast('bad', 'The download is not available right now.',
           'The video is still stored and locked.', 9000);
-    pushFeed('error', job.id, 'download: ' + e.message);
+    pushFeed('error', job.id, 'download: ' + e.message, 'the download is not available right now');
   });
 }
 
@@ -862,14 +883,14 @@ function renderProv() {
     r.appendChild(el('span', null, v));
     body.appendChild(r);
   }
-  kv('job_id', job.id);
-  kv('created_at', job.created_at_iso || '—');
-  kv('scene_count', String(job.scene_count || (job.scenes || []).length));
-  kv('first_frame_ms', job.first_frame_ms != null ? String(job.first_frame_ms) : '—');
-  kv('total_render_ms', job.total_render_ms != null ? String(job.total_render_ms) : '—');
-  kv('stream_url', job.stream_url || '—');
-  kv('manifest', job.manifest_url ? 'provenance/' + job.id + '/manifest.json' : '— (aún no)');
-  kv('object_lock', job.lock ? job.lock.mode + ' until ' + job.lock.retain_until : '— (not approved)');
+  kv('Spot', job.id);
+  kv('Created', job.created_at_iso || '—');
+  kv('Scenes', String(job.scene_count || (job.scenes || []).length));
+  kv('First frame', secs(job.first_frame_ms));
+  kv('Full render', secs(job.total_render_ms));
+  kv('Stream', job.stream_url || '—');
+  kv('Manifest', job.manifest_url ? 'provenance/' + job.id + '/manifest.json' : '— (not yet)');
+  kv('Object Lock', job.lock ? job.lock.mode + ' until ' + job.lock.retain_until : '— (not approved)');
 
   // Linaje: cada rechazo encadena una toma nueva con parent_run_id.
   var det = (S.detail && S.detail.job && S.detail.job.id === job.id) ? S.detail : null;
@@ -893,37 +914,76 @@ function renderProv() {
   vbtn.addEventListener('click', function () { verify(job, vbtn); });
   body.appendChild(vbtn);
 
-  var box = el('div', 'jsonbox', '');
+  // El manifest se LEE, no se vuelca. Antes esto imprimía el JSON entero: dos mil
+  // caracteres de llaves que nadie inspecciona y que hacen parecer la herramienta
+  // un volcado de depuración. Se enseña lo que dice; el fichero crudo, a un clic.
+  var box = el('div', 'manibox');
+  body.appendChild(box);
   if (!job.manifest_url) {
-    box.textContent = 'No manifest yet — it is written when the render finishes.';
-    body.appendChild(box);
-  } else if (job.status !== 'approved') {
-    box.textContent = 'The manifest is sealed on approval.\nExpected key: provenance/' +
-                      job.id + '/manifest.json';
-    var lbtn = el('button', 'minibtn', 'Load manifest anyway');
-    lbtn.type = 'button';
-    lbtn.addEventListener('click', function () { fetchManifest(job, box); });
-    body.appendChild(lbtn);
-    body.appendChild(box);
+    box.appendChild(el('div', 'tnote', 'No manifest yet — it is written when the render ends.'));
   } else {
-    body.appendChild(box);
     fetchManifest(job, box);
+    var raw = el('a', 'rawlink', 'View raw manifest');
+    raw.href = job.manifest_url;
+    raw.target = '_blank';
+    raw.rel = 'noopener';
+    body.appendChild(raw);
   }
 }
 
 function fetchManifest(job, box) {
-  box.textContent = 'loading manifest…';
+  clear(box);
+  box.appendChild(el('div', 'tnote', 'Reading the manifest…'));
   var forJob = job.id;
   fetch(job.manifest_url, { cache: 'no-store' }).then(function (r) {
-    return r.text().then(function (t) { return { ok: r.ok, status: r.status, t: t }; });
+    return r.json().then(function (m) { return { ok: r.ok, status: r.status, m: m }; },
+                         function () { return { ok: false, status: r.status, m: null }; });
   }).then(function (res) {
     if (S.sel !== forJob || !box.parentNode) return;
-    if (!res.ok) { box.textContent = 'manifest unavailable (HTTP ' + res.status + ')'; return; }
-    try { box.textContent = JSON.stringify(JSON.parse(res.t), null, 1); }
-    catch (e) { box.textContent = res.t.slice(0, 1400); }
-  }).catch(function (e) {
-    if (box.parentNode) box.textContent = 'manifest unavailable: ' + e.message;
+    clear(box);
+    if (!res.ok || !res.m) {
+      box.appendChild(el('div', 'tnote',
+        'The manifest is not readable right now (it is written when the render ends).'));
+      return;
+    }
+    renderManifest(res.m, box);
+  }).catch(function () {
+    if (!box.parentNode) return;
+    clear(box);
+    box.appendChild(el('div', 'tnote', 'The manifest could not be read right now.'));
   });
+}
+
+// El manifest, en filas. Cada línea es un hecho comprobable: qué se generó, con qué
+// modo, cuánto tardó y qué objetos lo respaldan en B2.
+function renderManifest(m, box) {
+  function line(k, v) {
+    var r = el('div', 'kv');
+    r.appendChild(el('span', null, k));
+    r.appendChild(el('span', null, v));
+    box.appendChild(r);
+  }
+  var sc = m.scenes || [], seg = m.segments || [], pev = m.provider_events || [];
+  line('Sealed at', m.created_at || '—');
+  line('Generation mode', m.mode || '—');
+  line('Brief', (m.brief || '—').slice(0, 120));
+  line('First frame', secs(m.first_frame_ms));
+  line('Full render', secs(m.total_render_ms));
+  line('Scenes recorded', sc.length + ' (' +
+       sc.filter(function (s) { return s.status === 'ready'; }).length + ' ready)');
+  line('Segments in B2', String(seg.length));
+  line('Pipeline events', String(pev.length));
+
+  if (seg.length) {
+    box.appendChild(el('div', 'subhead', 'OBJECT KEYS'));
+    var lin = el('div', 'lin');
+    seg.slice(0, 8).forEach(function (s) {
+      lin.appendChild(el('div', null, (s.key || 'seq ' + s.seq) +
+                                      (s.duration ? '  ' + Number(s.duration).toFixed(1) + 's' : '')));
+    });
+    if (seg.length > 8) lin.appendChild(el('div', null, '…and ' + (seg.length - 8) + ' more'));
+    box.appendChild(lin);
+  }
 }
 
 function verify(job, btn) {
@@ -1030,8 +1090,26 @@ function fmtClock(ts) {
          String(d.getSeconds()).padStart(2, '0');
 }
 
-function pushFeed(type, jobId, detail) {
-  S.feed.push({ at: Date.now(), type: type, job: jobId, detail: detail });
+/* El feed tiene dos lectores. `detail` es la cadena técnica y se queda en
+ * "Technical details", donde es evidencia. `human` es lo mismo contado en
+ * castellano llano y es lo único que entra en el inspector: rutas de objeto,
+ * claves de B2 y nombres de modelo no le dicen nada a quien produce el anuncio. */
+var FEED_HUMAN = {
+  scene_ready:       'Scene ready',
+  render_started:    'Streaming started',
+  render_complete:   'Render finished',
+  segment_landed:    'Saved to storage',
+  provider_failover: 'Switched provider',
+  judge_score:       'Quality check',
+  approved:          'Approved',
+  rejected:          'Changes requested',
+  job_update:        'Updated',
+  chaos:             'Provider test',
+  error:             'Problem'
+};
+
+function pushFeed(type, jobId, detail, human) {
+  S.feed.push({ at: Date.now(), type: type, job: jobId, detail: detail, human: human });
   if (S.feed.length > FEED_MAX) S.feed.shift();
   railFeed();
   renderFeed();
@@ -1117,12 +1195,13 @@ function railChips() {
     c.appendChild(el('b', null, String(v)));
     box.appendChild(c);
   }
-  chip('gen', h.mode || '?');
-  chip('b2', !h.b2 ? 'off' : (h.b2_capped ? 'capped' : 'ok'), h.b2 && !h.b2_capped ? 'ok' : 'warn');
-  chip('tx', (h.b2_transactions && h.b2_transactions.total != null) ? h.b2_transactions.total : '—');
-  chip('events', h.events_mode || '?');
-  chip('player', Player.engine || '—');
-  if (h.degraded) chip('estado', 'degradado', 'warn');
+  // Las siglas y los modos internos viven en "Technical details". Aquí, el estado
+  // del servicio dicho como se lo contarías a alguien por teléfono.
+  chip('Storage', !h.b2 ? 'local only' : (h.b2_capped ? 'saving locally' : 'Backblaze B2'),
+       h.b2 && !h.b2_capped ? 'ok' : 'warn');
+  chip('Live updates', h.events_mode && h.events_mode !== 'off' ? 'on' : 'off');
+  chip('Playback', Player.engine === 'native' ? 'built-in' : (Player.engine || '—'));
+  if (h.degraded) chip('Service', 'reduced capacity', 'warn');
 }
 
 function railScenes() {
@@ -1143,40 +1222,62 @@ function railScenes() {
   });
 }
 
+/* El expediente del spot, en frases.
+ *
+ * Aquí vivía un volcado de `JSON.stringify(job)`. Un volcado no es información:
+ * es una estructura de datos puesta delante de alguien que no la pidió. Los
+ * mismos hechos —y no uno menos, porque son la evidencia de que esto usa B2 y
+ * Genblaze de verdad— dichos en el idioma de quien mira. El dato crudo no se
+ * pierde: sale por "View raw manifest", que es donde lo va a buscar quien lo
+ * quiera. */
 function railProv() {
-  var body = $('r-prov'), box = $('r-json');
+  var body = $('r-prov');
   if (!body) return;
   clear(body);
   var job = selJob();
-  if (!job) { box.textContent = '—'; return; }
-  function kv(k, v) {
+  if (!job) {
+    body.appendChild(el('div', 'tnote', 'Open a spot to see its record.'));
+    return;
+  }
+
+  function row(k, v, sub) {
     var r = el('div', 'kv');
     r.appendChild(el('span', null, k));
-    r.appendChild(el('span', null, v));
+    var val = el('span', null);
+    val.appendChild(document.createTextNode(v));
+    if (sub) val.appendChild(el('em', 'kv-sub', sub));
+    r.appendChild(val);
     body.appendChild(r);
   }
-  kv('job_id', job.id);
-  kv('bucket', (S.health && S.health.bucket) || 'genblaze-review');
-  kv('manifest', job.manifest_url ? 'provenance/' + job.id + '/manifest.json' : '—');
-  kv('lock', job.lock ? job.lock.mode : '—');
 
-  // El manifest sellado si existe; si no, el estado real del job como JSON vivo.
-  if (job.status === 'approved' && job.manifest_url) {
-    if (box.getAttribute('data-for') !== job.id) {
-      box.setAttribute('data-for', job.id);
-      fetchManifest(job, box);
-    }
+  var sc = job.scenes || [];
+  var ready = sc.filter(function (x) { return x.status === 'ready'; }).length;
+  var total = job.scene_count || sc.length;
+
+  row('Status', statusOf(job).label);
+  row('Scenes', total ? ready + ' of ' + total + ' ready' : 'none yet');
+  if (job.first_frame_ms != null) row('First frame', 'after ' + secs(job.first_frame_ms));
+  if (job.total_render_ms != null) row('Full render', secs(job.total_render_ms));
+  row('Created', humanDate(job.created_at));
+  row('Stored in', 'Backblaze B2', 'every take, segment and master');
+
+  if (job.lock) {
+    row('Protection', 'Locked for ' + daysLeft(job.lock.retain_until) + ' more days',
+        'Object Lock, ' + String(job.lock.mode || '').toLowerCase() + ' mode');
   } else {
-    box.removeAttribute('data-for');
-    box.textContent = JSON.stringify({
-      id: job.id, status: job.status,
-      scene_count: job.scene_count,
-      first_frame_ms: job.first_frame_ms,
-      total_render_ms: job.total_render_ms,
-      scenes: (job.scenes || []).map(function (x) { return { n: x.n, status: x.status, ms: x.ms }; }),
-      stream_url: job.stream_url,
-      lock: job.lock || null
-    }, null, 1);
+    row('Protection', 'Applied on approval', 'the master becomes undeletable');
+  }
+
+  row('Provenance', job.manifest_url
+    ? (job.status === 'approved' ? 'Sealed with the master' : 'Recorded')
+    : 'Written when the render ends');
+
+  if (job.manifest_url) {
+    var a = el('a', 'rawlink', 'View raw manifest');
+    a.href = job.manifest_url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    body.appendChild(a);
   }
 }
 
@@ -1185,12 +1286,12 @@ function railFeed() {
   if (!body) return;
   clear(body);
   $('r-n-feed').textContent = S.feed.length;
-  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Waiting for B2 events…')); return; }
+  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Nothing has happened yet.')); return; }
   S.feed.slice(-40).reverse().forEach(function (f) {
     var r = el('div', 'feedrow');
     r.appendChild(el('span', 't', fmtClock(f.at)));
-    r.appendChild(el('span', 'k ' + f.type, f.type));
-    r.appendChild(el('span', 'd', (f.job && f.job !== S.sel ? f.job + ' ' : '') + (f.detail || '')));
+    r.appendChild(el('span', 'k ' + f.type, FEED_HUMAN[f.type] || 'Update'));
+    if (f.human) r.appendChild(el('span', 'd', f.human));
     body.appendChild(r);
   });
 }
@@ -1235,7 +1336,7 @@ function loadDetail(id) {
     renderTech();
   }).catch(function (e) {
     if (S.sel !== id) return;
-    pushFeed('error', id, 'GET /api/jobs/' + id + ': ' + e.message);
+    pushFeed('error', id, 'GET /api/jobs/' + id + ': ' + e.message, 'could not refresh this spot');
   });
 }
 
@@ -1299,38 +1400,45 @@ function handleEvent(type, d) {
     case 'render_complete':
       if (d.job) upsertJob(d.job);
       if (type === 'scene_ready') {
-        pushFeed('scene_ready', jid, 'scene ' + d.scene + ' ready' + (d.ms ? ' · ' + d.ms + ' ms' : ''));
+        pushFeed('scene_ready', jid, 'scene ' + d.scene + ' ready' + (d.ms ? ' · ' + d.ms + ' ms' : ''),
+                 'scene ' + d.scene + (d.ms ? ' in ' + secs(d.ms) : ''));
       } else if (type === 'render_complete') {
-        pushFeed('render_complete', jid, 'total_render_ms ' + d.total_render_ms);
+        pushFeed('render_complete', jid, 'total_render_ms ' + d.total_render_ms,
+                 'the whole spot took ' + secs(d.total_render_ms));
         if (jid === S.sel) toast('', 'Your spot is ready for review.', null, 7000);
       } else {
-        pushFeed('job_update', jid, (d.job && d.job.status) || '');
+        pushFeed('job_update', jid, (d.job && d.job.status) || '',
+                 d.job ? statusOf(d.job).label.toLowerCase() : '');
       }
       return;
 
     case 'render_started':
-      pushFeed('render_started', jid, 'first segment on B2 · scene ' + (d.scene != null ? d.scene : '—'));
+      pushFeed('render_started', jid, 'first segment on B2 · scene ' + (d.scene != null ? d.scene : '—'),
+               'the first seconds are watchable');
       if (d.job) upsertJob(d.job);
       return;
 
     case 'segment_landed':
       S.segs[jid] = (S.segs[jid] || 0) + 1;
       if (jid === S.sel) { topMeta(); renderTechChips(); }
-      pushFeed('segment_landed', jid, 'b2:ObjectCreated · ' + (d.key || ('seq ' + d.seq)));
+      pushFeed('segment_landed', jid, 'b2:ObjectCreated · ' + (d.key || ('seq ' + d.seq)),
+               'a new piece of video is safe in Backblaze B2');
       return;
 
     case 'provider_failover':
       // Ana no necesita saber qué modelo era: sólo que no ha perdido el trabajo.
       toast('warn', 'A provider failed; we continued on another one without losing the work.', null, 9000);
       pushFeed('provider_failover', jid,
-               (d.model || '?') + ' → ' + (d.fallback_model || '?') + (d.scene ? ' · scene ' + d.scene : ''));
+               (d.model || '?') + ' → ' + (d.fallback_model || '?') + (d.scene ? ' · scene ' + d.scene : ''),
+               'one generator failed, another took over — no work lost');
       if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene,
                                reason: (d.model || '?') + ' MODEL_ERROR en ' + (d.provider || '?'),
                                action: 'fallback → ' + (d.fallback_model || '?') });
       return;
 
     case 'judge_score':
-      pushFeed('judge_score', jid, 'scene ' + d.scene + ' · score ' + (d.score != null ? d.score.toFixed(2) : '—'));
+      pushFeed('judge_score', jid, 'scene ' + d.scene + ' · score ' + (d.score != null ? d.score.toFixed(2) : '—'),
+               'scene ' + d.scene + ' reviewed automatically');
       if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene, score: d.score,
                                iteration: d.iteration,
                                reason: d.detail || d.reason || 'vision judge (llama-3.2-90b-vision)',
@@ -1339,7 +1447,8 @@ function handleEvent(type, d) {
 
     case 'approved':
       if (d.job) upsertJob(d.job);
-      pushFeed('approved', jid, 'Object Lock GOVERNANCE · ' + (d.key || ''));
+      pushFeed('approved', jid, 'Object Lock GOVERNANCE · ' + (d.key || ''),
+               'the master is now locked against deletion');
       if (jid === S.sel) {
         var days = d.lock ? daysLeft(d.lock.retain_until) : 30;
         toast('good', 'Approved and locked.', 'Nobody can delete or modify it for ' + days + ' days.', 9000);
@@ -1348,7 +1457,8 @@ function handleEvent(type, d) {
 
     case 'rejected':
       if (d.job) upsertJob(d.job);
-      pushFeed('rejected', jid, 'note: ' + (d.note || '') + (d.scene ? ' · scene ' + d.scene : ''));
+      pushFeed('rejected', jid, 'note: ' + (d.note || '') + (d.scene ? ' · scene ' + d.scene : ''),
+               d.note ? '\u201c' + d.note + '\u201d' : 'reworking that part');
       if (jid === S.sel) {
         var j = jobById(jid);
         if (j) Player.load(j, { reattach: true });
@@ -1358,7 +1468,8 @@ function handleEvent(type, d) {
 
     case 'chaos':
       S.chaos[d.provider] = !!d.dead;
-      pushFeed('chaos', jid, d.provider + (d.dead ? ' DOWN' : ' back up'));
+      pushFeed('chaos', jid, d.provider + (d.dead ? ' DOWN' : ' back up'),
+               d.dead ? 'a generator was taken down on purpose' : 'the generator is back');
       toast(d.dead ? 'warn' : 'good',
             d.dead ? 'Provider taken down on purpose.' : 'Provider back up.',
             d.dead ? 'The next attempt will switch to another provider on its own.' : null, 7000);
@@ -1386,11 +1497,11 @@ function loadHealth() {
       loadHealth._warned = true;
       // Traducido: nada de cuotas ni transacciones.
       toast('warn', 'Running at reduced capacity.', 'You can keep creating, watching and approving as normal.', 12000);
-      pushFeed('error', null, 'health: ' + (h.warning || 'degraded'));
+      pushFeed('error', null, 'health: ' + (h.warning || 'degraded'), 'running at reduced capacity');
     }
   }).catch(function (e) {
     toast('bad', 'Cannot reach the server.', 'Still retrying — nothing you already have is lost.', 12000);
-    pushFeed('error', null, 'GET /api/health: ' + e.message);
+    pushFeed('error', null, 'GET /api/health: ' + e.message, 'the server is not answering');
   });
 }
 
