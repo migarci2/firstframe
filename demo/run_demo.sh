@@ -67,7 +67,7 @@ export DEMO_MODE=mock
 # escena medidos) en mitad de la demo y reviente el numero de primer fotograma.
 export GEN_MODE="$GENMODE"
 export JUDGE_THRESHOLD=0
-export EVENTS_MODE=off
+export EVENTS_MODE=${EVENTS_MODE:-poll}   # poll: el feed del panel se puebla; off deja ese bloque muerto en camara
 export HLS_SERVE_FROM=local
 export MAX_ITERATIONS="${MAX_ITERATIONS:-1}"
 export PORT

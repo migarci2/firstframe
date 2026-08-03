@@ -701,9 +701,12 @@ def normalize_scene(src: str | Path, dest: str | Path, *,
     src, dest = Path(src), Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     args = [P.ffmpeg_bin(), "-loglevel", "error", "-y", "-i", str(src)]
-    if label:
-        args += ["-vf", f"drawtext=text='{P._esc(label)}':fontsize=28:x=30:"
-                        f"y=30:fontcolor=white@0.85:box=1:boxcolor=black@0.35:boxborderw=10"]
+    # La marca dice algo real (esto es un borrador hasta que se aprueba), pero a
+    # tamano 28 con caja negra se comia el plano. Discreta y abajo a la izquierda:
+    # se lee si la buscas y no compite con el material. WATERMARK=off la quita.
+    if label and os.environ.get("WATERMARK", "").lower() not in ("off", "0", "no"):
+        args += ["-vf", f"drawtext=text='{P._esc(label)}':fontsize=15:x=28:"
+                        f"y=h-38:fontcolor=white@0.42"]
     args += [*P.CANONICAL_VIDEO_ARGS, *P.CANONICAL_AUDIO_ARGS,
              "-movflags", "+faststart", str(dest)]
     subprocess.run(args, capture_output=True, text=True, check=True)
