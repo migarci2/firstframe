@@ -313,12 +313,19 @@ button { cursor: pointer; }
   color: var(--smoke);
 }
 #proj-picker {
-  max-width: 210px;
-  background: rgba(255,255,255,.05);
+  max-width: 220px; height: 39px;
+  appearance: none; -webkit-appearance: none;
+  background-color: rgba(255,255,255,.05);
+  background-image: linear-gradient(45deg, transparent 50%, var(--ash) 50%),
+                    linear-gradient(135deg, var(--ash) 50%, transparent 50%);
+  background-position: right 17px center, right 12px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
   border: 1px solid var(--border); border-radius: 999px;
   color: var(--white); font-size: 13.5px; font-weight: 500;
-  padding: 8px 12px; outline: none;
-  transition: border-color .18s ease;
+  padding: 0 34px 0 16px; outline: none;
+  text-overflow: ellipsis;
+  transition: border-color .18s ease, background-color .18s ease;
 }
 #proj-picker:hover { border-color: rgba(255,255,255,.16); }
 #proj-picker option { background: var(--card); color: var(--white); }
