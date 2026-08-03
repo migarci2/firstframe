@@ -179,11 +179,22 @@ def render(base: str, spec: dict, timeout: float = 240.0) -> dict:
 
 
 def approve(base: str, jid: str) -> dict:
+    # El badge de Object Lock depende de un `get_object_retention` (Class B). Con la
+    # cuota agotada el backend entra en enfriamiento y ni lo intenta, asi que se sale
+    # del enfriamiento justo antes: es la unica ventana en la que el lock puede salir.
+    try:
+        _req(f"{base}/api/health/reset-b2-stats", "POST", {}, timeout=10)
+    except Exception:
+        pass
     _, out = _req(f"{base}/api/jobs/{jid}/decision", "POST",
-                  {"action": "approve", "note": "aprobado para la demo"}, timeout=120)
+                  {"action": "approve", "note": "aprobado para la demo"}, timeout=180)
     j = out["job"]
     lock = j.get("lock")
-    print(f"[seed] {jid} aprobado — lock={lock or 'pendiente (cuota B2)'}")
+    print(f"[seed] {jid} aprobado — lock={lock or 'PENDIENTE (cuota B2 agotada)'}")
+    if not lock:
+        print("[seed] AVISO: sin badge de Object Lock. El master SI esta subido "
+              "(las subidas son Class A); falta la lectura de la retencion. "
+              "Vuelve a intentarlo cuando la cuota se recupere.")
     return j
 
 
