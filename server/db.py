@@ -217,6 +217,46 @@ def set_status(job_id: str, status: str, **fields) -> dict | None:
     return update_job(job_id, status=status, **fields)
 
 
+# Las tablas que cuelgan de un job. Borrar un spot sin vaciarlas deja huerfanos que
+# reaparecen en el manifest y en el feed del siguiente job con el mismo id.
+CHILD_TABLES = ("scenes", "decisions", "provider_events", "segments", "events")
+
+
+def delete_job(job_id: str) -> bool:
+    if not get_job(job_id):
+        return False
+    for t in CHILD_TABLES:
+        try:
+            _exec(f"DELETE FROM {t} WHERE job_id=?", (job_id,))
+        except sqlite3.OperationalError:
+            pass                    # la tabla puede no tener job_id en una DB vieja
+    _exec("DELETE FROM jobs WHERE id=?", (job_id,))
+    return True
+
+
+def reset_job(job_id: str, brief: str | None = None, scene_count: int | None = None) -> dict | None:
+    """Deja el spot como recien creado, conservando su id, titulo y proyecto.
+
+    Es lo que hace falta para relanzar la generacion con un brief nuevo sin perder
+    el sitio del spot en el arbol ni las referencias que ya haya por ahi.
+    """
+    row = get_job(job_id)
+    if not row:
+        return None
+    n = int(scene_count or row["scene_count"] or 6)
+    for t in ("scenes", "provider_events", "segments"):
+        _exec(f"DELETE FROM {t} WHERE job_id=?", (job_id,))
+    fields = {"status": "queued", "scene_count": n, "started_at": None,
+              "first_frame_ms": None, "total_render_ms": None,
+              "manifest_key": None, "lock_mode": None, "lock_until": None, "error": None}
+    if brief is not None:
+        fields["brief"] = brief
+    update_job(job_id, **fields)
+    for i in range(1, n + 1):
+        _exec("INSERT OR IGNORE INTO scenes(job_id,n,status) VALUES(?,?,'pending')", (job_id, i))
+    return get_job(job_id)
+
+
 # ------------------------------------------------------------------ projects
 def add_project(name: str) -> str:
     name = (name or "").strip() or DEFAULT_PROJECT
@@ -228,15 +268,67 @@ def projects() -> list[dict]:
     """Los proyectos declarados MAS los que solo viven en la columna de jobs.
 
     La union importa: una DB migrada tiene jobs con proyecto y la tabla vacia.
+
+    Cada proyecto viaja con lo que la rejilla necesita para parecer una carpeta de
+    trabajo y no una fila de una tabla: cuantos spots tiene, cuando se toco por
+    ultima vez, y cual es el spot mas reciente (del que sale la miniatura).
     """
     rows = {r["name"]: r["created_at"] for r in _rows("SELECT name,created_at FROM projects")}
     for r in _rows("SELECT DISTINCT project FROM jobs WHERE project IS NOT NULL AND project<>''"):
         rows.setdefault(r["project"], 0)
     counts = {r["project"]: r["c"] for r in
               _rows("SELECT project, COUNT(*) AS c FROM jobs GROUP BY project")}
-    out = [{"name": n, "created_at": at, "spots": counts.get(n, 0)} for n, at in rows.items()]
-    out.sort(key=lambda p: (-p["spots"], p["name"].lower()))
+    # Recorrido de mas viejo a mas nuevo: el ultimo que se escribe es el reciente.
+    last: dict[str, dict] = {}
+    for r in _rows("SELECT project,id,title,status,created_at FROM jobs ORDER BY created_at"):
+        last[r["project"]] = r
+    out = []
+    for n, at in rows.items():
+        l = last.get(n) or {}
+        out.append({
+            "name": n,
+            "created_at": at,
+            "spots": counts.get(n, 0),
+            "updated_at": l.get("created_at") or at,
+            "last_spot": l.get("id"),
+            "last_title": l.get("title"),
+            "last_status": l.get("status"),
+        })
+    out.sort(key=lambda p: (-(p["updated_at"] or 0), p["name"].lower()))
     return out
+
+
+def rename_project(old: str, new: str) -> str | None:
+    """None si el destino ya existe: fusionar proyectos en silencio pierde trabajo."""
+    old = (old or "").strip()
+    new = (new or "").strip()[:64]
+    if not old or not new:
+        return None
+    if old == new:
+        return new
+    if _row("SELECT 1 AS x FROM projects WHERE name=?", (new,)):
+        return None
+    if _row("SELECT 1 AS x FROM jobs WHERE project=? LIMIT 1", (new,)):
+        return None
+    born = _row("SELECT created_at FROM projects WHERE name=?", (old,))
+    _exec("INSERT OR IGNORE INTO projects(name,created_at) VALUES(?,?)",
+          (new, (born or {}).get("created_at") or now_ms()))
+    _exec("UPDATE jobs SET project=? WHERE project=?", (new, old))
+    _exec("DELETE FROM projects WHERE name=?", (old,))
+    return new
+
+
+def project_job_ids(name: str) -> list[str]:
+    return [r["id"] for r in _rows("SELECT id FROM jobs WHERE project=?", (name,))]
+
+
+def delete_project(name: str) -> list[str]:
+    """Borra el proyecto y todos sus spots. Devuelve los ids borrados."""
+    ids = project_job_ids(name)
+    for jid in ids:
+        delete_job(jid)
+    _exec("DELETE FROM projects WHERE name=?", (name,))
+    return ids
 
 
 # ------------------------------------------------------------------ scenes
@@ -402,6 +494,25 @@ def demo() -> None:
     assert reject_count("j_test") == 1
     set_status("j_test", "in_review", total_render_ms=9000)
     assert get_job("j_test")["status"] == "in_review"
+
+    # --- edicion: renombrar, relanzar, borrar ---
+    assert rename_project("Nike Q3", "Nike Q4") == "Nike Q4"
+    assert get_job("j_test")["project"] == "Nike Q4"
+    assert rename_project("Vacio", "Nike Q4") is None      # el destino ya existe
+    p = {x["name"]: x for x in projects()}
+    assert p["Nike Q4"]["spots"] == 1 and p["Nike Q4"]["last_spot"] == "j_test"
+
+    assert reset_job("j_test", brief="brief nuevo")["status"] == "queued"
+    r = get_job("j_test")
+    assert r["brief"] == "brief nuevo" and r["total_render_ms"] is None
+    assert len(scenes("j_test")) == 3 and segments("j_test") == []
+    assert reject_count("j_test") == 1        # el historial de decisiones se conserva
+
+    create_job("j_otro", "b", "T", 2, project="Nike Q4")
+    assert sorted(delete_project("Nike Q4")) == ["j_otro", "j_test"]
+    assert get_job("j_test") is None
+    assert "Nike Q4" not in {x["name"] for x in projects()}
+    assert delete_job("j_test") is False       # idempotente
     print("db.demo OK ->", tmp)
 
 

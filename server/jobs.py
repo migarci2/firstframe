@@ -176,6 +176,141 @@ def create_job(brief: str, title: str | None = None, scenes: int | None = None,
     return public_job(jid)
 
 
+# ------------------------------------------------------------------ edicion
+# Un proyecto y un spot son objetos de trabajo, no registros inmutables: se
+# renombran, se mueven de sitio y se tiran. Todo lo de aqui es sincrono y termina
+# publicando por SSE, para que la pestana de al lado vea el cambio sin recargar.
+EDITABLE = ("title", "brief", "project")
+
+
+def edit_job(job_id: str, **fields) -> dict | None:
+    from server import db, events
+
+    db.init()
+    if db.get_job(job_id) is None:
+        return None
+    clean: dict[str, str] = {}
+    for k in EDITABLE:
+        v = fields.get(k)
+        if v is None:
+            continue
+        v = str(v).strip()
+        if k == "project":
+            v = db.add_project(v)              # mover a un proyecto lo crea si hace falta
+        elif k == "title":
+            v = v[:120] or None
+        if v:
+            clean[k] = v
+    if clean:
+        db.update_job(job_id, **clean)
+    j = public_job(job_id)
+    events.publish("job_update", {"job_id": job_id, "job": j})
+    return j
+
+
+def _wipe_files(job_id: str) -> None:
+    import shutil
+
+    from server import assembler
+
+    assembler.reset(job_id)                    # data/hls/{job}
+    for d in (WORK / job_id, RUNS / job_id):
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def delete_job(job_id: str) -> bool:
+    """Borra el spot de la DB y del disco. Lo que ya subio a B2 se queda: en
+    `approved/` esta bajo Object Lock y B2 rechazaria el borrado de todas formas."""
+    from server import db, events
+
+    db.init()
+    if not db.delete_job(job_id):
+        return False
+    _wipe_files(job_id)
+    events.publish("job_deleted", {"job_id": job_id})
+    return True
+
+
+def regenerate(job_id: str, brief: str | None = None, scenes: int | None = None) -> dict | None:
+    """Relanza la generacion con el brief que haya ahora, conservando el id del spot."""
+    from server import db, events
+
+    db.init()
+    row = db.get_job(job_id)
+    if row is None:
+        return None
+    n = max(1, min(int(scenes or row["scene_count"] or DEFAULT_SCENES), 6))
+    _wipe_files(job_id)
+    db.reset_job(job_id, brief=brief, scene_count=n)
+    row = db.get_job(job_id)
+    j = public_job(job_id)
+    events.publish("job_update", {"job_id": job_id, "job": j})
+    events.wake()
+    threading.Thread(target=_run_job_safe, args=(job_id, row["brief"], n), daemon=True,
+                     name=f"job-{job_id}").start()
+    return j
+
+
+def rename_project(old: str, new: str) -> dict | None:
+    from server import db, events
+
+    db.init()
+    got = db.rename_project(old, new)
+    if got is None:
+        return None
+    events.publish("projects_changed", {"renamed": [old, got]})
+    return {"name": got, "from": old}
+
+
+def delete_project(name: str) -> list[str]:
+    from server import db, events
+
+    db.init()
+    ids = db.delete_project(name)
+    for jid in ids:
+        _wipe_files(jid)
+    events.publish("projects_changed", {"deleted": name, "jobs": ids})
+    return ids
+
+
+# ------------------------------------------------------------------ miniatura
+POSTERS = Path(os.getenv("FIRSTFRAME_POSTERS", ROOT / "data" / "posters"))
+
+
+def poster(job_id: str) -> Path | None:
+    """Un fotograma del spot, cacheado en disco.
+
+    La rejilla de proyectos sin imagen es una lista de texto; con ella parece un
+    proyecto empezado. Se saca con ffmpeg de la primera escena lista y se guarda,
+    asi que cuesta una vez por spot y CERO transacciones de B2.
+    """
+    from server import db
+
+    db.init()
+    POSTERS.mkdir(parents=True, exist_ok=True)
+    out = POSTERS / f"{job_id}.jpg"
+    if out.is_file() and out.stat().st_size > 0:
+        return out
+    src = None
+    for s in db.scenes(job_id):
+        p = s["path"]
+        if p and not str(p).startswith(("incoming/", "approved/", "rejected/")) \
+                and Path(p).is_file():
+            src = Path(p)
+            break
+    if src is None:
+        return None
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.6", "-i", str(src),
+             "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "5", str(out)],
+            check=True, timeout=25, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:      # noqa: BLE001 — sin miniatura la tarjeta cae al degradado
+        print(f"[jobs] WARN poster {job_id}: {e!r}")
+        return None
+    return out if out.is_file() and out.stat().st_size else None
+
+
 def mark_rendering(job_id: str) -> None:
     from server import db, events
 

@@ -162,6 +162,32 @@ async def create_project(req: Request):
     return JSONResponse({"project": jobs.create_project(name)}, status_code=201)
 
 
+@app.patch("/api/projects/{name:path}")
+async def rename_project(name: str, req: Request):
+    body = await _json(req)
+    new = (body.get("name") or "").strip()
+    if not new:
+        return _err(400, "name is required")
+    if _stub():
+        return {"project": {"name": new[:64], "from": name}}
+    from server import jobs
+
+    got = jobs.rename_project(name, new)
+    if got is None:
+        return _err(409, "another project already uses that name")
+    return {"project": got}
+
+
+@app.delete("/api/projects/{name:path}")
+def delete_project(name: str):
+    """Borra el proyecto CON sus spots. La UI confirma antes; aqui no se pregunta."""
+    if _stub():
+        return {"ok": True, "deleted": []}
+    from server import jobs
+
+    return {"ok": True, "deleted": jobs.delete_project(name)}
+
+
 # ---------------------------------------------------------------- jobs
 @app.get("/api/jobs")
 def list_jobs():
@@ -214,6 +240,71 @@ def get_job(job_id: str):
     if detail is None:
         return _err(404, "no such job")
     return detail
+
+
+@app.patch("/api/jobs/{job_id}")
+async def edit_job(job_id: str, req: Request):
+    """Renombrar el spot, corregir su brief o moverlo a otro proyecto."""
+    body = await _json(req)
+    if _stub():
+        from server import stubdata
+
+        j = dict(stubdata.job(job_id) or stubdata.jobs()[0])
+        j.update({k: v for k, v in body.items() if k in ("title", "brief", "project")})
+        return {"job": j}
+    from server import jobs
+
+    j = jobs.edit_job(job_id, title=body.get("title"), brief=body.get("brief"),
+                      project=body.get("project"))
+    if j is None:
+        return _err(404, "no such job")
+    return {"job": j}
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str):
+    if _stub():
+        return {"ok": True}
+    from server import jobs
+
+    if not jobs.delete_job(job_id):
+        return _err(404, "no such job")
+    return {"ok": True}
+
+
+@app.post("/api/jobs/{job_id}/regenerate")
+async def regenerate_job(job_id: str, req: Request):
+    """Vuelve a generar el MISMO spot con el brief que tenga ahora.
+
+    Se conserva el id: el spot no cambia de sitio en el arbol ni pierde su historial
+    de decisiones, que es justo lo que se espera al corregir un brief.
+    """
+    body = await _json(req)
+    if _stub():
+        from server import stubdata
+
+        return {"job": stubdata.jobs()[0]}
+    from server import jobs
+
+    j = jobs.regenerate(job_id, brief=(body.get("brief") or None),
+                        scenes=body.get("scenes"))
+    if j is None:
+        return _err(404, "no such job")
+    return {"job": j}
+
+
+@app.get("/api/jobs/{job_id}/poster.jpg")
+def job_poster(job_id: str):
+    """Miniatura del spot. 404 si todavia no hay ninguna escena en disco."""
+    if _stub():
+        return _err(404, "no poster")
+    from server import jobs
+
+    p = jobs.poster(job_id)
+    if p is None:
+        return _err(404, "no poster yet")
+    return FileResponse(str(p), media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=60"})
 
 
 @app.post("/api/jobs/{job_id}/decision")
