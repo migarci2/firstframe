@@ -49,7 +49,10 @@ from genblaze import (
     StepCache,
     StepType,
 )
+from genblaze_core.exceptions import ProviderError
+from genblaze_core.models.enums import ProviderErrorCode
 from genblaze_core.models.step import Step
+from genblaze_core.providers.base import SyncProvider
 from genblaze_core.runnable.config import RunnableConfig
 
 from pipeline import prompts as PR
@@ -323,9 +326,96 @@ def prompt_seed(text: str) -> int:
     return int(hashlib.sha256(text.encode()).hexdigest()[:8], 16) % (2 ** 31)
 
 
+class GuardedImageProvider(SyncProvider):
+    """Keyframe real con red de seguridad: si el proveedor se agota, mock.
+
+    Por que
+    -------
+    El tier anonimo de Pollinations serializa por IP y admite UNA peticion en
+    cola. Dos jobs a la vez (o alguien generando en otra terminal) y el
+    segundo se come un 429. `PollinationsProvider` ya reintenta 4 veces con
+    backoff honrando `Retry-After`, pero cuando agota los intentos lanza y
+    `raise_on_failure=True` mata el JOB ENTERO: la UI se queda en "No se pudo
+    terminar" y no hay video. Visto en vivo, no teorizado.
+
+    Reintentar mas no arregla nada — la ranura sigue ocupada. Lo que arregla
+    el sintoma es que agotar un proveedor NO pueda matar el job: esa escena
+    cae al keyframe mock y el spot se termina. Una escena degradada es
+    infinitamente mejor que un job muerto, y es lo que hace ya el resto de la
+    app (claves ausentes -> `mixed`, video muerto -> `fallback_models`).
+
+    Honestidad, que es la otra mitad del arreglo
+    --------------------------------------------
+    Degradar en silencio seria peor que fallar. Cada degradacion deja rastro
+    en los tres sitios donde alguien puede mirar:
+
+      - `step.model` pasa a ser el modelo mock: el manifest NO puede decir que
+        esto lo genero flux.
+      - `step.metadata`: `degraded`, `degraded_reason` y el par
+        `fallback_from`/`fallback_model`, que es lo que `manifest.py` mete en
+        `SceneRecord.fallbacks` y `runner.run_job` convierte en un evento
+        `provider_failover` — o sea, sale solo en el feed y en el panel
+        tecnico, sin tocar ni el runner ni el server.
+      - `on_degrade`: sube `provider_mode` del run a `degraded` (ver
+        `build_scene_pipeline`), asi que el manifest agregado tampoco lo
+        esconde.
+
+    MODEL_ERROR se re-lanza a proposito: es el UNICO codigo ante el que el
+    `Pipeline` prueba `fallback_models=`. Tragarselo aqui desactivaria el
+    failover de modelo, que es una demo aparte. Se degrada por lo demas
+    (RATE_LIMIT, TIMEOUT, SERVER_ERROR...), que es justo lo que un 429 agotado
+    produce.
+    """
+
+    name = "pollinations-guarded"
+
+    def __init__(self, primary: Any, fallback: Any, *,
+                 fallback_model: str = "mock-image",
+                 on_degrade: Any = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.primary = primary
+        self.fallback = fallback
+        self.fallback_model = fallback_model
+        self.on_degrade = on_degrade
+        self.degraded: str | None = None
+
+    def get_capabilities(self) -> Any:
+        return self.primary.get_capabilities()
+
+    def generate(self, step: Step, config: RunnableConfig | None = None) -> Step:
+        try:
+            return self.primary.generate(step, config)
+        except ProviderError as exc:
+            if exc.error_code is ProviderErrorCode.MODEL_ERROR:
+                raise                      # que salte `fallback_models=` primero
+            reason = f"{exc.error_code.name}: {exc}"[:200]
+        except Exception as exc:  # noqa: BLE001 - nada puede matar el job aqui
+            reason = f"UNEXPECTED: {exc}"[:200]
+
+        failed_model = step.model or FREE_IMAGE_MODEL
+        logger.warning("keyframe degradado a mock (%s se agoto): %s",
+                       failed_model, reason)
+        self.degraded = reason
+        # El manifest tiene que poder decir que esto NO lo genero el modelo real.
+        step.model = self.fallback_model
+        step.metadata = {**(step.metadata or {}),
+                         "degraded": True, "degraded_reason": reason,
+                         "fallback_from": failed_model,
+                         "fallback_model": self.fallback_model}
+        if self.on_degrade is not None:
+            self.on_degrade(failed_model, reason)
+        step = self.fallback.generate(step, config)
+        for asset in step.assets:
+            asset.metadata = {**(asset.metadata or {}), "degraded": True,
+                              "degraded_reason": reason}
+        return step
+
+
 def free_providers(scene: Scene, workdir: Path, ps: ProviderSet) -> ProviderSet:
     """Enchufa generacion real gratuita: Pollinations + Ken Burns."""
-    ps.image = CachedPollinations()
+    # El mock que ya trae `ps.image` se recicla como red de seguridad en vez de
+    # tirarse: es exactamente el keyframe que produciria un run mock.
+    ps.image = GuardedImageProvider(CachedPollinations(), ps.image)
     ps.image_model = FREE_IMAGE_MODEL
     ps.image_fallbacks = list(FREE_IMAGE_FALLBACKS)
     ps.video = KenBurnsProvider(
@@ -339,6 +429,8 @@ def free_providers(scene: Scene, workdir: Path, ps: ProviderSet) -> ProviderSet:
     ps.video_fallbacks = list(FREE_VIDEO_FALLBACKS)
     ps.mode = "free"
     ps.notes.append("keyframe REAL con Pollinations (gratis, ~45 s en el tier anonimo)")
+    ps.notes.append("si Pollinations se agota (429), el keyframe cae a mock y el "
+                    "job sigue; queda como provider_mode=degraded")
     ps.notes.append(f"clip por Ken Burns ffmpeg ({FREE_VIDEO_MODEL}), no hay video gratis")
     ps.notes.append("voiceover en mock: no hay TTS gratis sin tarjeta")
     return ps
@@ -471,6 +563,20 @@ def build_scene_pipeline(
     pipe.metadata(job=job, scene=scene.n, scene_title=scene.title,
                   iteration=iteration, provider_mode=ps.mode,
                   provider_notes="; ".join(ps.notes) or None)
+    if isinstance(ps.image, GuardedImageProvider):
+        # `Pipeline.metadata()` es acumulativo y no se vuelca a `Run.metadata`
+        # hasta `_finalize()`, DESPUES de correr los steps: por eso una llamada
+        # desde dentro del step 0 todavia llega al manifest. Es lo que permite
+        # que una degradacion en caliente aparezca como provider_mode=degraded
+        # sin tocar el runner ni el server.
+        def _degraded(failed_model: str, reason: str) -> None:
+            ps.mode = "degraded"
+            ps.notes.append(f"keyframe degradado a mock: {failed_model} -> {reason}")
+            pipe.metadata(provider_mode="degraded",
+                          provider_notes="; ".join(ps.notes),
+                          degraded_reason=reason)
+
+        ps.image.on_degrade = _degraded
     if parent is not None:
         # Lineage entre escenas. El AgentLoop hace lo mismo entre iteraciones.
         pipe.from_result(parent)
@@ -697,7 +803,8 @@ def demo() -> None:
             wd = tmp / "free"
             ps = resolve_providers(sc, wd)
             assert ps.mode == "free", ps.mode
-            assert isinstance(ps.image, CachedPollinations), type(ps.image)
+            assert isinstance(ps.image, GuardedImageProvider), type(ps.image)
+            assert isinstance(ps.image.primary, CachedPollinations)
             assert isinstance(ps.video, KenBurnsProvider), type(ps.video)
             assert ps.video_model == KEN_BURNS_MODEL, ps.video_model
             assert ps.video_fallbacks == [KEN_BURNS_FALLBACK], ps.video_fallbacks
@@ -738,6 +845,58 @@ def demo() -> None:
             assert corpus.get(k1).read_bytes() == png.read_bytes()
             assert len(KeyframeCorpus(tmp / "corpus")) == 1, "el index no persiste"
 
+            # --- 429 agotado: la escena degrada, el JOB NO muere -------------
+            # Es lo que se vio en vivo: el tier anonimo serializa por IP, dos
+            # jobs a la vez y el segundo se comia un 429 que mataba el job
+            # entero. Aqui se simula agotando el proveedor primario.
+            class _Exhausted:
+                def get_capabilities(self):
+                    return None
+
+                def generate(self, step, config=None):
+                    raise ProviderError(
+                        "pollinations HTTP 429: Too Many Requests",
+                        error_code=ProviderErrorCode.RATE_LIMIT, attempts=4)
+
+            dwd = tmp / "degraded"
+            dps = resolve_providers(sc, dwd)
+            dps.image = GuardedImageProvider(
+                _Exhausted(), P.mock_image_provider(dwd, label="degradado"))
+            dres = build_scene_pipeline(sc, "degjob", brief="spot", workdir=dwd,
+                                        providers=dps, cache_dir=None).run(
+                                            raise_on_failure=True)
+            dsteps = dres.run.steps
+            assert all(st.status == StepStatus.SUCCEEDED for st in dsteps), \
+                [(st.step_index, st.status, st.error) for st in dsteps]
+            dkf = dsteps[0]
+            assert dkf.assets, "la escena degradada tiene que producir keyframe"
+            # 1. Honesto: el manifest no puede decir que esto lo genero flux.
+            assert dkf.metadata.get("degraded") is True, dkf.metadata
+            assert "429" in dkf.metadata.get("degraded_reason", ""), dkf.metadata
+            assert dkf.model == "mock-image", dkf.model
+            assert dres.run.metadata.get("provider_mode") == "degraded", \
+                dres.run.metadata
+            # 2. Visible: fallback_from/fallback_model son lo que manifest.py
+            #    mete en SceneRecord.fallbacks y runner convierte en el evento
+            #    provider_failover del feed.
+            assert dkf.metadata.get("fallback_from") == FREE_IMAGE_MODEL
+            assert dkf.metadata.get("fallback_model") == "mock-image"
+            # 3. El spot se termina: fan-in y mp4 concatenable como cualquiera.
+            assert composite_asset(dres) is not None, "el job degradado no dio mp4"
+            # MODEL_ERROR NO se traga: es lo unico que dispara fallback_models.
+            class _BadModel(_Exhausted):
+                def generate(self, step, config=None):
+                    raise ProviderError("modelo desconocido",
+                                        error_code=ProviderErrorCode.MODEL_ERROR)
+
+            guard = GuardedImageProvider(_BadModel(), P.mock_image_provider(dwd))
+            try:
+                guard.generate(Step(provider="x", model="flux",
+                                    modality=Modality.IMAGE, prompt="p"))
+                raise AssertionError("MODEL_ERROR tenia que propagarse")
+            except ProviderError as exc:
+                assert exc.error_code is ProviderErrorCode.MODEL_ERROR
+
             # El camino real de free salvo la llamada a la red: keyframe local
             # -> Ken Burns -> fan-in con la voz -> parametros canonicos.
             ps.image = P.mock_image_provider(wd, label="free")
@@ -772,8 +931,9 @@ def demo() -> None:
 
     print("demo OK: 4 steps, fan-in audio+video en el compositor, parametros "
           f"identicos entre escenas, lineage por parent_run_id, failover "
-          f"{VIDEO_MODEL} -> {VIDEO_FALLBACKS[0]} con el chaos activo y modo free "
-          f"cableado (corpus, seed por prompt y clip Ken Burns concatenable)")
+          f"{VIDEO_MODEL} -> {VIDEO_FALLBACKS[0]} con el chaos activo, modo free "
+          f"cableado (corpus, seed por prompt y clip Ken Burns concatenable) y "
+          f"un 429 agotado degradando la escena a mock sin matar el job")
 
 
 if __name__ == "__main__":
