@@ -98,7 +98,7 @@ button:disabled{opacity:.6; cursor:default}
     <p class="msg" id="msg" role="alert"></p>
   </form>
 
-  <div class="foot"><a href="/landing.html">What is FirstFrame? →</a></div>
+  <div class="foot"><a href="/">What is FirstFrame? →</a></div>
 </main>
 
 <script>
@@ -108,6 +108,14 @@ button:disabled{opacity:.6; cursor:default}
   var btn = document.getElementById('go');
   var msg = document.getElementById('msg');
   input.focus();
+
+  // Se vuelve a donde el usuario queria ir, no siempre a la sala por defecto.
+  // Solo rutas internas: un ?next= con http:// seria un redirector abierto.
+  function dest() {
+    var m = /[?&]next=([^&]*)/.exec(location.search || '');
+    var raw = m ? decodeURIComponent(m[1]) : '';
+    return (raw.charAt(0) === '/' && raw.charAt(1) !== '/') ? raw : '/app';
+  }
 
   f.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -123,7 +131,7 @@ button:disabled{opacity:.6; cursor:default}
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: code })
     }).then(function (r) {
-      if (r.ok) { window.location.replace('/'); return; }
+      if (r.ok) { window.location.replace(dest()); return; }
       document.body.classList.add('err');
       msg.textContent = r.status === 401
         ? 'That code is not valid. Check the submission text and try again.'

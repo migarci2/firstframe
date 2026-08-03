@@ -363,7 +363,8 @@ var Player = {
  * dentro del último archivo que alguien abrió. De aquí se sale abriendo un
  * proyecto; el editor (PROJECT/MONITOR/TIMELINE/INSPECTOR) es lo de dentro. */
 
-function showHome() {
+function showHome(opts) {
+  opts = opts || {};
   S.view = 'home';
   S.sel = null;
   Player.teardown();
@@ -371,7 +372,7 @@ function showHome() {
   $('view-home').hidden = false;
   $('changes').hidden = true;
   $('briefedit').hidden = true;
-  setHash('');
+  if (!opts.keepUrl) go(HOME_PATH, !!opts.replace);
   renderHome();
   renderCrumb();
 }
@@ -383,11 +384,13 @@ function openProject(name, opts) {
   S.view = 'compose';
   document.body.classList.remove('at-home');
   $('view-home').hidden = true;
-  setHash('p/' + encodeURIComponent(name));
+  if (!opts.keepUrl) go(projPath(name), !!opts.replace);
 
   var mine = jobsOf(name);
-  if (opts.compose || !mine.length) showCompose();
-  else select(mine[0].id);
+  // Abrir un proyecto es UN sitio nuevo aunque acabe cayendo en su último spot:
+  // el salto al spot corrige la URL en su sitio, no añade otra entrada atrás.
+  if (opts.compose || !mine.length) showCompose({ keepUrl: opts.keepUrl });
+  else select(mine[0].id, { keepUrl: opts.keepUrl, replace: true });
   renderJobs();
   renderProjectPicker();
   renderCrumb();
@@ -547,6 +550,10 @@ function renameProject(h, name) {
         S.projects.forEach(function (p) { if (p.name === name) p.name = got; });
         if (S.project === name) S.project = got;
         if (S.folded[name] != null) { S.folded[got] = S.folded[name]; delete S.folded[name]; }
+        // Si la URL nombraba el proyecto viejo, se corrige en su sitio.
+        if (location.pathname.indexOf(projPath(name)) === 0) {
+          go(location.pathname.replace(projPath(name), projPath(got)), true);
+        }
         renderHome();
         renderJobs();
         renderProjectPicker();
@@ -605,29 +612,63 @@ function submitHomeProject(e) {
     });
 }
 
-/* ═════════════════════ ruta en el hash ═════════════════════
- * Recargar no debería devolverte al principio. El hash guarda el proyecto
- * abierto; sin router, sin dependencias. */
+/* ═════════════════════ rutas ═════════════════════
+ * Rutas de verdad, no hash: la URL dice dónde estás, recargar te deja donde
+ * estabas y el botón atrás del navegador funciona.
+ *
+ *   /app/projects              la rejilla
+ *   /app/p/<proyecto>          un proyecto abierto
+ *   /app/p/<proyecto>/<spot>   un spot abierto
+ *
+ * El servidor sirve el mismo documento para todo /app/*; el router es esto. */
 
-function setHash(h) {
-  var want = h ? '#/' + h : '';
-  if (location.hash === want || (!location.hash && !want)) return;
-  try { history.replaceState(null, '', location.pathname + location.search + want); }
-  catch (e) { location.hash = want; }
+var HOME_PATH = '/app/projects';
+
+function projPath(name)      { return '/app/p/' + encodeURIComponent(name); }
+function spotPath(name, id)  { return projPath(name) + '/' + encodeURIComponent(id); }
+
+// `replace` para el primer pintado y para las correcciones (renombrar, mover):
+// esas no son sitios nuevos, son el mismo sitio con otro nombre.
+function go(path, replace) {
+  if (location.pathname === path) return;
+  try { history[replace ? 'replaceState' : 'pushState'](null, '', path + location.search); }
+  catch (e) { location.pathname = path; }
 }
 
-function readHash() {
-  var m = /^#\/p\/(.+)$/.exec(location.hash || '');
-  if (!m) return null;
-  try { return decodeURIComponent(m[1]); } catch (e) { return null; }
+function readRoute() {
+  var p = (location.pathname || '').replace(/\/+$/, '');
+  var m = /^\/app\/p\/([^\/]+)(?:\/([^\/]+))?$/.exec(p);
+  if (!m) return null;                       // /app, /app/projects → la rejilla
+  try {
+    return { project: decodeURIComponent(m[1]),
+             spot: m[2] ? decodeURIComponent(m[2]) : null };
+  } catch (e) { return null; }
+}
+
+/* Pinta lo que dice la URL. Se usa al arrancar y en cada `popstate`; nunca
+ * vuelve a tocar el historial, o el botón atrás se pelearía consigo mismo. */
+function applyRoute() {
+  var r = readRoute();
+  if (!r) { if (S.view !== 'home') showHome({ keepUrl: true }); return; }
+  if (allProjects().indexOf(r.project) === -1) { showHome(); return; }
+  if (r.spot && jobById(r.spot)) {
+    S.project = r.project;
+    if (S.sel !== r.spot) select(r.spot, { keepUrl: true });
+    return;
+  }
+  if (S.project !== r.project || S.view !== 'compose') {
+    openProject(r.project, { compose: true, keepUrl: true });
+  }
 }
 
 /* ═════════════════════════════ vistas ═════════════════════════════ */
 
-function showCompose() {
+function showCompose(opts) {
+  opts = opts || {};
   S.view = 'compose';
   S.sel = null;
   Player.teardown();
+  if (!opts.keepUrl && S.project) go(projPath(S.project), !!opts.replace);
   $('view-compose').hidden = false;
   $('view-spot').hidden = true;
   $('changes').hidden = true;
@@ -685,10 +726,11 @@ function select(id, opts) {
   if (changed) { $('changes').hidden = true; $('briefedit').hidden = true; }
 
   if (changed || opts.force) Player.load(job);
-  // Abrir un spot deja su proyecto como activo y desplegado: la cabecera y el
-  // árbol dicen lo mismo que el monitor.
+  // Abrir un spot deja su proyecto como activo: la cabecera del panel y el
+  // monitor dicen lo mismo.
   S.project = projectOf(job);
   S.folded[S.project] = false;
+  if (!opts.keepUrl) go(spotPath(S.project, job.id), !!opts.replace);
 
   renderJobs();
   renderStage();
@@ -856,6 +898,7 @@ function submitNewProject(e) {
   if (allProjects().indexOf(name) === -1) S.projects.push({ name: name, spots: 0 });
   S.project = name;
   S.folded[name] = false;
+  go(projPath(name));
   renderJobs();
   renderProjectPicker();
   renderCrumb();
@@ -988,7 +1031,7 @@ function moveSpot(job, name) {
       if (d.job) upsertJob(d.job);
       S.project = name;
       S.folded[name] = false;
-      setHash('p/' + encodeURIComponent(name));
+      go(spotPath(name, job.id), true);   // el spot no se ha movido de sitio: se corrige
       renderJobs();
       renderProjectPicker();
       renderCrumb();
@@ -2053,13 +2096,18 @@ function bootstrapJobs() {
     S.jobs = d.jobs || [];
     renderJobs();
     renderProjectPicker();
-    // Se entra por la rejilla de proyectos, salvo que el hash diga qué había abierto.
-    var want = readHash();
-    if (want && allProjects().indexOf(want) !== -1) openProject(want);
-    else showHome();
+    // Se entra por donde diga la URL. Sin ruta útil, la rejilla — y sin dejar
+    // rastro en el historial, que este es el primer sitio, no el segundo.
+    var r = readRoute();
+    if (r && allProjects().indexOf(r.project) !== -1) {
+      if (r.spot && jobById(r.spot)) { S.project = r.project; select(r.spot, { keepUrl: true }); }
+      else openProject(r.project, { compose: true, replace: true });
+    } else {
+      showHome({ replace: true });
+    }
   }).catch(function () {
     renderJobs();
-    showHome();
+    showHome({ replace: true });
   });
 }
 
@@ -2155,11 +2203,9 @@ function start() {
   $('home-new-name').addEventListener('keydown', function (e) {
     if (e.key === 'Escape') $('home-new').hidden = true;
   });
-  window.addEventListener('hashchange', function () {
-    var want = readHash();
-    if (!want) { if (S.view !== 'home') showHome(); return; }
-    if (want !== S.project) openProject(want);
-  });
+  // Atrás y adelante del navegador: repintar lo que dice la URL, sin volver a
+  // tocar el historial.
+  window.addEventListener('popstate', applyRoute);
 
   // ── edición del spot abierto ──
   $('spot-title').addEventListener('dblclick', function () {
@@ -2173,7 +2219,7 @@ function start() {
   $('btn-signout').addEventListener('click', function () {
     api('/api/access/exit', { method: 'POST', body: {} })
       .catch(function () {})
-      .then(function () { window.location.replace('/gate.html'); });
+      .then(function () { window.location.replace('/access'); });
   });
   $('newproj').addEventListener('submit', submitNewProject);
   $('newproj-name').addEventListener('blur', function () { $('newproj').hidden = true; });

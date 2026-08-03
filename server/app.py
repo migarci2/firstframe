@@ -14,10 +14,12 @@ import json
 import os
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import (
     FileResponse,
+    HTMLResponse,
     JSONResponse,
     RedirectResponse,
     StreamingResponse,
@@ -71,12 +73,13 @@ def _err(status: int, msg: str, **extra):
 # ---------------------------------------------------------------- muro de acceso
 # La instancia es publica y el jurado entra por la URL, asi que hay un codigo
 # compartido (server/auth.py). Lo que NO puede quedar detras del muro:
-#   * la portada y sus assets — es material de marketing, tiene que indexar y abrir,
+#   * la portada "/" y sus assets — es material de marketing, tiene que indexar y abrir,
 #   * /api/health — es la sonda del contenedor y del script de arranque,
 #   * /webhooks/b2 — lo llama Backblaze, que obviamente no trae cookie (va firmado),
-#   * la propia pantalla de acceso y el endpoint que la valida.
+#   * la propia pantalla de acceso (/access) y el endpoint que la valida.
+# El muro protege /app/*, /api/* y /stream/*, que es la sala; la portada, no.
 _PUBLIC_EXACT = {
-    "/gate.html", "/landing.html", "/landing.css", "/landing.js",
+    "/", "/access", "/gate.html", "/landing.html", "/landing.css", "/landing.js",
     "/api/health", "/api/access", "/favicon.ico", "/robots.txt",
 }
 _PUBLIC_PREFIX = ("/assets/", "/vendor/", "/webhooks/")
@@ -96,8 +99,85 @@ async def _access_gate(request: Request, call_next):
         return await call_next(request)
     # Una peticion de datos recibe un error de datos; una de navegacion, la pantalla.
     if path.startswith(("/api/", "/stream/")):
-        return _err(401, "This workspace needs an access code.", gate="/gate.html")
-    return RedirectResponse("/gate.html", status_code=302)
+        return _err(401, "This workspace needs an access code.", gate="/access")
+    # Se recuerda a donde iba: tras meter el codigo se vuelve ahi, no a la raiz.
+    nxt = path + (("?" + request.url.query) if request.url.query else "")
+    return RedirectResponse("/access?next=" + quote(nxt, safe=""), status_code=302)
+
+
+# ---------------------------------------------------------------- rutas de pagina
+# Lo primero que ve alguien que llega de Devpost es la portada, no la sala:
+#
+#   /                          portada (publica)
+#   /app                       la sala -> /app/projects
+#   /app/projects              rejilla de proyectos
+#   /app/p/<proyecto>          un proyecto abierto
+#   /app/p/<proyecto>/<spot>   un spot abierto
+#   /access                    la pantalla del codigo
+#
+# Todo /app/* devuelve el mismo documento: el router vive en el cliente
+# (web/app.js) con history.pushState, asi que recargar mantiene el sitio y el
+# boton atras del navegador funciona.
+_LANDING_CACHE: dict[str, str] = {}
+
+
+def _landing_html() -> str:
+    """La portada, con sus CTAs apuntando a /app.
+
+    web/landing.html es de otro workstream y sus botones dicen href="/". Desde
+    que la raiz ES la portada eso se muerde la cola, asi que se reescribe al
+    vuelo en vez de tocar un fichero que no es de aqui.
+    """
+    p = WEB_DIR / "landing.html"
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return "<h1>FirstFrame</h1><p><a href=\"/app\">Open the app</a></p>"
+    key = str(p.stat().st_mtime_ns)
+    if _LANDING_CACHE.get("k") != key:
+        _LANDING_CACHE["k"] = key
+        _LANDING_CACHE["v"] = raw.replace('href="/"', 'href="/app"')
+    return _LANDING_CACHE["v"]
+
+
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+@app.get("/", include_in_schema=False)
+def page_landing():
+    return HTMLResponse(_landing_html(), headers=_NO_STORE)
+
+
+@app.get("/landing.html", include_in_schema=False)
+def page_landing_old():
+    return RedirectResponse("/", status_code=301)
+
+
+@app.get("/gate.html", include_in_schema=False)
+def page_gate_old():
+    return RedirectResponse("/access", status_code=301)
+
+
+@app.get("/index.html", include_in_schema=False)
+def page_index_old():
+    return RedirectResponse("/app", status_code=301)
+
+
+@app.get("/access", include_in_schema=False)
+def page_access():
+    return FileResponse(str(WEB_DIR / "gate.html"), media_type="text/html",
+                        headers=_NO_STORE)
+
+
+@app.get("/app", include_in_schema=False)
+def page_app_root():
+    return RedirectResponse("/app/projects", status_code=302)
+
+
+@app.get("/app/{rest:path}", include_in_schema=False)
+def page_app(rest: str):
+    return FileResponse(str(WEB_DIR / "index.html"), media_type="text/html",
+                        headers=_NO_STORE)
 
 
 def _https(req: Request) -> bool:
