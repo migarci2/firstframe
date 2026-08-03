@@ -187,7 +187,7 @@ var Player = {
     v.hidden = false;
   },
 
-  setEngine: function (n) { this.engine = n; renderTechChips(); },
+  setEngine: function (n) { this.engine = n; railChips(); renderTechChips(); },
 
   teardown: function () {
     if (this.hls) { try { this.hls.destroy(); } catch (e) {} this.hls = null; }
@@ -247,7 +247,7 @@ var Player = {
       hls.on(window.Hls.Events.LEVEL_UPDATED, function (_e, data) {
         var n = (data && data.details && data.details.fragments) ? data.details.fragments.length : 0;
         S.segs[self.jobId] = Math.max(S.segs[self.jobId] || 0, n);
-        if (self.jobId === S.sel) renderTechChips();
+        if (self.jobId === S.sel) { topMeta(); renderTechChips(); }
       });
 
       hls.on(window.Hls.Events.FRAG_BUFFERED, function () {
@@ -340,6 +340,7 @@ function showCompose() {
   $('view-spot').hidden = true;
   $('changes').hidden = true;
   renderJobs();
+  renderRail();
   renderTech();
   setTimeout(function () { $('brief').focus(); }, 30);
 }
@@ -360,6 +361,7 @@ function select(id, opts) {
 
   renderJobs();
   renderStage();
+  renderRail();
   renderTech();
   loadDetail(id);
 }
@@ -790,6 +792,7 @@ function fmtClock(ts) {
 function pushFeed(type, jobId, detail) {
   S.feed.push({ at: Date.now(), type: type, job: jobId, detail: detail });
   if (S.feed.length > FEED_MAX) S.feed.shift();
+  railFeed();
   renderFeed();
 }
 
@@ -833,6 +836,116 @@ function renderChaos() {
   });
 }
 
+
+/* ═════════════════════════ raíl de ejecución ═════════════════════════
+ * Siempre visible: la sustancia técnica del run sin tener que abrir nada.
+ * Es lo que hace que esto se lea como una herramienta y no como una maqueta. */
+
+function topMeta() {
+  var box = $('topmeta');
+  if (!box) return;
+  clear(box);
+  var job = selJob();
+  if (!job) return;
+  function t(txt, cls) { box.appendChild(el('span', 'tm' + (cls ? ' ' + cls : ''), txt)); }
+  t(job.id);
+  t(job.status, job.status === 'approved' ? 'ok' : (isLive(job) ? 'on' : ''));
+  if (job.first_frame_ms != null) t('ff ' + (job.first_frame_ms / 1000).toFixed(1) + 's');
+  if (job.total_render_ms != null) t('total ' + (job.total_render_ms / 1000).toFixed(1) + 's');
+  if (S.segs[job.id]) t(S.segs[job.id] + ' seg');
+}
+
+function railChips() {
+  var box = $('r-chips');
+  if (!box) return;
+  clear(box);
+  var h = S.health || {};
+  function chip(k, v, cls) {
+    var c = el('span', 'tchip' + (cls ? ' ' + cls : ''));
+    c.appendChild(document.createTextNode(k + ' '));
+    c.appendChild(el('b', null, String(v)));
+    box.appendChild(c);
+  }
+  chip('gen', h.mode || '?');
+  chip('b2', !h.b2 ? 'off' : (h.b2_capped ? 'capped' : 'ok'), h.b2 && !h.b2_capped ? 'ok' : 'warn');
+  chip('tx', (h.b2_transactions && h.b2_transactions.total != null) ? h.b2_transactions.total : '—');
+  chip('events', h.events_mode || '?');
+  chip('player', Player.engine || '—');
+  if (h.degraded) chip('estado', 'degradado', 'warn');
+}
+
+function railScenes() {
+  var body = $('r-scenes');
+  if (!body) return;
+  clear(body);
+  var job = selJob();
+  var sc = (job && job.scenes) || [];
+  var ready = sc.filter(function (x) { return x.status === 'ready'; }).length;
+  $('r-n-scenes').textContent = job ? ready + '/' + (job.scene_count || sc.length) : '';
+  if (!sc.length) { body.appendChild(el('div', 'tnote', 'Sin escenas todavía.')); return; }
+  sc.forEach(function (x) {
+    var r = el('div', 'scenerow ' + x.status);
+    r.appendChild(el('span', 'no', String(x.n)));
+    r.appendChild(el('span', 'ti', x.title || '—'));
+    r.appendChild(el('span', 'st', x.status + (x.ms != null ? ' ' + Math.round(x.ms / 1000) + 's' : '')));
+    body.appendChild(r);
+  });
+}
+
+function railProv() {
+  var body = $('r-prov'), box = $('r-json');
+  if (!body) return;
+  clear(body);
+  var job = selJob();
+  if (!job) { box.textContent = '—'; return; }
+  function kv(k, v) {
+    var r = el('div', 'kv');
+    r.appendChild(el('span', null, k));
+    r.appendChild(el('span', null, v));
+    body.appendChild(r);
+  }
+  kv('job_id', job.id);
+  kv('bucket', (S.health && S.health.bucket) || 'genblaze-review');
+  kv('manifest', job.manifest_url ? 'provenance/' + job.id + '/manifest.json' : '—');
+  kv('lock', job.lock ? job.lock.mode : '—');
+
+  // El manifest sellado si existe; si no, el estado real del job como JSON vivo.
+  if (job.status === 'approved' && job.manifest_url) {
+    if (box.getAttribute('data-for') !== job.id) {
+      box.setAttribute('data-for', job.id);
+      fetchManifest(job, box);
+    }
+  } else {
+    box.removeAttribute('data-for');
+    box.textContent = JSON.stringify({
+      id: job.id, status: job.status,
+      scene_count: job.scene_count,
+      first_frame_ms: job.first_frame_ms,
+      total_render_ms: job.total_render_ms,
+      scenes: (job.scenes || []).map(function (x) { return { n: x.n, status: x.status, ms: x.ms }; }),
+      stream_url: job.stream_url,
+      lock: job.lock || null
+    }, null, 1);
+  }
+}
+
+function railFeed() {
+  var body = $('r-feed');
+  if (!body) return;
+  clear(body);
+  $('r-n-feed').textContent = S.feed.length;
+  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Esperando eventos de B2…')); return; }
+  S.feed.slice(-40).reverse().forEach(function (f) {
+    var r = el('div', 'feedrow');
+    r.appendChild(el('span', 't', fmtClock(f.at)));
+    r.appendChild(el('span', 'k ' + f.type, f.type));
+    r.appendChild(el('span', 'd', (f.job && f.job !== S.sel ? f.job + ' ' : '') + (f.detail || '')));
+    body.appendChild(r);
+  });
+}
+
+function renderRail() { topMeta(); railChips(); railScenes(); railProv(); railFeed(); }
+
 /* ═════════════════════════ datos + SSE ═════════════════════════ */
 
 function upsertJob(job) {
@@ -843,7 +956,7 @@ function upsertJob(job) {
   }
   if (!found) S.jobs.unshift(job);
   renderJobs();
-  if (job.id === S.sel) { renderStage(); renderTech(); }
+  if (job.id === S.sel) { renderStage(); renderRail(); renderTech(); }
 }
 
 function loadDetail(id) {
@@ -867,6 +980,7 @@ function loadDetail(id) {
     });
     var live = (S.iters[id] || []).filter(function (x) { return x._live; });
     S.iters[id] = arr.concat(live);
+    renderRail();
     renderTech();
   }).catch(function (e) {
     if (S.sel !== id) return;
@@ -933,7 +1047,7 @@ function handleEvent(type, d) {
 
     case 'segment_landed':
       S.segs[jid] = (S.segs[jid] || 0) + 1;
-      if (jid === S.sel) renderTechChips();
+      if (jid === S.sel) { topMeta(); renderTechChips(); }
       pushFeed('segment_landed', jid, 'b2:ObjectCreated · ' + (d.key || ('seq ' + d.seq)));
       return;
 
@@ -999,6 +1113,7 @@ function pickDefaultJob() {
 function loadHealth() {
   api('/api/health').then(function (h) {
     S.health = h;
+    railChips();
     renderTechChips();
     if (h.degraded && !loadHealth._warned) {
       loadHealth._warned = true;

@@ -5,22 +5,23 @@
 <meta name="viewport" content="width=1280, initial-scale=1">
 <!-- El servidor sirve web/ sin Cache-Control, así que el navegador se inventa una
      frescura heurística y se queda con la UI antigua. Los assets van versionados
-     (?v=9) y el documento pide no cachearse. -->
+     (?v=) y el documento pide no cachearse. -->
 <meta http-equiv="Cache-Control" content="no-store">
 <title>FirstFrame</title>
-<link rel="stylesheet" href="/styles.css?v=9">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230d0e10'/><path d='M10 9h12v3.2H13.4v3.9h7.8v3.2h-7.8V24H10z' fill='%23f2f2f3'/></svg>">
+<link rel="stylesheet" href="/styles.css?v=11">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23040506'/><path d='M10 9h12v3.2H13.4v3.9h7.8v3.2h-7.8V24H10z' fill='%23ffffff'/></svg>">
 </head>
 <body>
 
 <header class="top">
   <div class="wordmark">FirstFrame<i>.</i></div>
-  <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Ver detalles técnicos</button>
+  <div class="topmeta" id="topmeta"></div>
+  <button class="linkbtn" id="btn-tech" type="button" aria-expanded="false">Detalles técnicos</button>
 </header>
 
 <div class="shell">
 
-  <!-- ─────────────── barra lateral: los spots de Ana ─────────────── -->
+  <!-- ─────────────── barra lateral: los spots ─────────────── -->
   <aside class="side">
     <button class="newbtn" id="btn-new" type="button">Nuevo spot</button>
     <div class="side-label">Tus spots</div>
@@ -82,9 +83,30 @@
     </section>
 
   </main>
+
+  <!-- ─────────────── raíl: la evidencia, siempre a la vista ─────────────── -->
+  <aside class="rail" id="rail" aria-label="Ejecución">
+    <div class="rail-chips" id="r-chips"></div>
+
+    <section class="rblock">
+      <h4>Escenas <span class="n" id="r-n-scenes"></span></h4>
+      <div id="r-scenes"></div>
+    </section>
+
+    <section class="rblock">
+      <h4>Procedencia</h4>
+      <div id="r-prov"></div>
+      <div class="jsonbox" id="r-json">—</div>
+    </section>
+
+    <section class="rblock rblock-feed">
+      <h4>Eventos <span class="n" id="r-n-feed">0</span></h4>
+      <div class="feed" id="r-feed"></div>
+    </section>
+  </aside>
 </div>
 
-<!-- ─────────────── panel técnico: toda la evidencia, a un clic ─────────────── -->
+<!-- ─────────────── panel técnico: la evidencia profunda ─────────────── -->
 <div class="scrim" id="scrim" hidden></div>
 <aside class="tech" id="tech" hidden aria-label="Detalles técnicos">
   <div class="tech-top">
@@ -134,6 +156,6 @@
 
 <script src="/vendor/hls.min.js"></script>
 <script src="/mse.js"></script>
-<script src="/app.js?v=9"></script>
+<script src="/app.js?v=11"></script>
 </body>
 </html>
