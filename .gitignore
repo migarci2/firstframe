@@ -18,3 +18,23 @@ ad/out/
 
 # generado por demo/voiceover.py
 demo/vo/
+
+# Produccion del video y material de submission: no forma parte del producto
+ad/
+demo/GUION.md
+demo/VOICEOVER.md
+demo/voiceover.py
+demo/thumb.html
+demo/thumbnail.png
+demo/placeholder.mp4
+demo/tunel.sh
+demo/YOUTUBE.md
+demo/DEVPOST_FIELDS.md
+docs/arch.html
+docs/ui-prompt.md
+docs/gifs/LINKS.md
+PLAN.md
+SUBMISSION.md
+SUBMISSION_STORY.md
+nem.md
+scripts/limpiar_historial.sh
