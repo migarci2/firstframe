@@ -125,6 +125,12 @@ button { cursor: pointer; }
 }
 .linkbtn:hover { color: var(--white); background: rgba(255,255,255,.05); }
 .linkbtn[aria-expanded="true"] { color: var(--white); }
+.linkbtn:disabled { color: var(--iron); cursor: default; }
+.linkbtn:disabled:hover { background: none; color: var(--iron); }
+
+/* Sin spot abierto: fuera lo que no tiene nada que enseñar. */
+body.no-spot .p-timeline,
+body.no-spot .p-inspector { display: none; }
 
 /* ───────────────────────── sistema de paneles ─────────────────────────
    Cada zona es un panel con nombre en versalitas: PROJECT, MONITOR, TIMELINE,
@@ -203,33 +209,77 @@ button { cursor: pointer; }
 }
 #newproj-name::placeholder { color: var(--smoke); }
 
-/* — el árbol: proyectos plegables con sus spots dentro — */
+/* — el selector: la cabecera del panel ES el proyecto abierto — */
+
+.projsel { position: relative; margin: 0 12px 10px; }
+.projsel-btn {
+  display: flex; align-items: baseline; gap: 8px; width: 100%;
+  background: none; border: 0; text-align: left;
+  padding: 2px 0;
+  color: var(--white);
+  transition: color .15s;
+}
+.projsel-name {
+  font-size: 15px; font-weight: 600; letter-spacing: -.015em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.projsel-n {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--iron);
+}
+.projsel-tw {
+  flex: none; margin-left: auto;
+  font-style: normal; font-size: 10px; line-height: 1;
+  color: var(--iron);
+  transition: color .15s, transform .18s ease;
+}
+.projsel-btn:hover .projsel-tw { color: var(--ash); }
+.projsel-btn[aria-expanded="true"] .projsel-tw { transform: rotate(180deg); color: var(--ash); }
+
+.projsel-menu {
+  position: absolute; z-index: 40; top: calc(100% + 7px); left: -6px; right: -6px;
+  background: var(--card);
+  border: 1px solid var(--border); border-radius: 9px;
+  padding: 5px;
+  max-height: 46vh; overflow-y: auto;
+}
+.projsel-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; text-align: left;
+  padding: 7px 9px; border-radius: 6px;
+  font-size: 13px; font-weight: 450;
+  color: var(--ash);
+  transition: background .12s, color .12s;
+}
+.projsel-item:hover { background: rgba(255,255,255,.06); color: var(--white); }
+.projsel-item.cur { color: var(--white); }
+.projsel-item.cur::before { content: "•"; color: var(--coral); margin-right: -2px; }
+.projsel-item .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.projsel-item .n {
+  margin-left: auto; flex: none;
+  font-family: var(--mono); font-size: 10px; color: var(--iron);
+}
+.projsel-all {
+  margin-top: 4px; padding-top: 10px;
+  border-top: 1px solid var(--border-2);
+  border-radius: 0 0 6px 6px;
+  color: var(--smoke);
+}
+
+/* — la lista: SOLO los spots del proyecto abierto — */
 
 .tree { margin-top: 14px; }
 
-.proj-head {
-  display: flex; align-items: center; gap: 7px; width: 100%;
-  background: none; border: 0; text-align: left;
-  padding: 6px 12px;
-  font-family: var(--mono);
-  font-size: 10.5px; font-weight: 400;
-  text-transform: uppercase; letter-spacing: .11em;
-  color: var(--smoke);
-  transition: color .15s;
-}
-.proj-head:hover { color: var(--white); }
-.proj-head.cur { color: var(--white); }
-.proj-head .tw { flex: none; width: 8px; color: var(--iron); font-style: normal; }
-.proj-head .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proj-head .n  { margin-left: auto; color: var(--iron); }
-
-.proj-spots { padding-bottom: 6px; }
-.proj-empty { font-size: 12px; color: var(--iron); padding: 4px 12px 8px 27px; }
+.proj-empty { padding: 2px 12px 8px; }
+.proj-empty p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--smoke); }
+.proj-empty p.dim { margin-top: 3px; color: var(--iron); }
 
 .jobrow {
   display: block; width: 100%; text-align: left;
   background: none; border: 0;
-  padding: 7px 12px 7px 27px;
+  padding: 7px 12px 7px 14px;
   border-left: 2px solid transparent;
   transition: background .12s;
 }
@@ -273,7 +323,10 @@ button { cursor: pointer; }
 
 /* — paso 1: el brief — */
 
-.compose { margin: auto; width: 100%; max-width: 600px; }
+.compose { margin: auto; width: 100%; max-width: 660px; }
+/* Con los ejemplos y la promesa el paso 1 es más alto: si la ventana es baja
+ * se hace scroll en vez de recortar el titular. */
+.monbody:has(#view-compose:not([hidden])) { overflow-y: auto; }
 
 /* La misma escala que los h2 de la landing: peso 620 y tracking NEGATIVO.
  * El tracking positivo de antes venía de otro sistema y la delataba. */
@@ -284,25 +337,101 @@ button { cursor: pointer; }
   color: var(--white);
 }
 .compose-sub {
-  margin: 20px 0 28px;
+  margin: 16px 0 26px;
   color: var(--ash); font-size: 17px; line-height: 1.6; max-width: 52ch;
   text-wrap: pretty;
 }
 
+/* El campo es el acto principal de la pantalla, no una casilla de formulario:
+ * más alto, más aire y tipografía de escribir, no de rellenar. */
 #brief {
-  width: 100%;
-  background: rgba(255,255,255,.035);
-  border: 1px solid var(--border); border-radius: 12px;
-  padding: 14px 16px;
-  font-size: 16px; line-height: 1.55;
+  display: block; width: 100%;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px 22px;
+  min-height: 148px;
+  font-family: inherit;
+  font-size: 19px; line-height: 1.5; letter-spacing: -.011em;
   color: var(--white);
   resize: none; outline: none;
-  transition: border-color .18s ease;
+  transition: border-color .18s ease, background .18s ease;
 }
-#brief::placeholder { color: var(--smoke); }
-#brief:focus { border-color: rgba(255,255,255,.22); }
+#brief::placeholder { color: var(--iron); }
+#brief:focus { border-color: rgba(255,107,94,.38); background: rgba(255,255,255,.045); }
 
-.compose-row { display: flex; align-items: flex-end; gap: 16px; margin-top: 20px; }
+/* Los ejemplos: el arranque en un clic. Pastillas de texto, no tarjetas. */
+.sparks {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 14px;
+}
+.sparks-lbl {
+  flex: none; margin-right: 2px;
+  font-family: var(--mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--iron);
+}
+.sparks button {
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--border); border-radius: 999px;
+  color: var(--ash);
+  font-size: 13px; font-weight: 450; letter-spacing: -.005em;
+  padding: 6px 13px;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.sparks button:hover {
+  color: var(--white);
+  background: rgba(255,255,255,.075);
+  border-color: rgba(255,255,255,.18);
+}
+.sparks button.on {
+  color: var(--coral);
+  border-color: rgba(255,107,94,.42);
+  background: rgba(255,107,94,.07);
+}
+
+.compose-row { display: flex; align-items: flex-end; gap: 16px; margin-top: 26px; }
+
+/* La promesa donde más importa: pegada al botón que la cumple. */
+.launch { display: flex; flex-direction: column; align-items: flex-end; gap: 9px; }
+.promise {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--smoke);
+  white-space: nowrap;
+}
+.promise i {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--coral);
+  flex: none;
+}
+
+/* Apagado de verdad cuando no hay brief; encendido de verdad cuando lo hay. */
+#btn-create:disabled {
+  opacity: 1;
+  background: rgba(255,255,255,.05);
+  border-color: var(--border);
+  color: var(--iron);
+}
+#btn-create:disabled:hover { background: rgba(255,255,255,.05); border-color: var(--border); }
+.compose.has-brief #btn-create { animation: ff-arm .26s ease-out; }
+@keyframes ff-arm {
+  0%   { transform: scale(.975); }
+  55%  { transform: scale(1.022); }
+  100% { transform: none; }
+}
+
+/* El paso de crear a ver: el monitor arranca. Un instante, no una intro. */
+body.igniting .p-monitor .videostage { animation: ff-ignite .40s cubic-bezier(.22,.7,.28,1) both; }
+body.igniting .p-timeline .tl        { animation: ff-rise .36s .05s cubic-bezier(.22,.7,.28,1) both; }
+@keyframes ff-ignite { from { opacity: 0; transform: scale(.986); } to { opacity: 1; transform: none; } }
+@keyframes ff-rise   { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .compose.has-brief #btn-create,
+  body.igniting .p-monitor .videostage,
+  body.igniting .p-timeline .tl { animation: none; }
+}
 
 /* Campos con etiqueta en versalitas: el proyecto se elige aquí, igual que en
  * cualquier diálogo de "nueva secuencia". */

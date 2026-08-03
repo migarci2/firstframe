@@ -8,7 +8,7 @@
      (?v=) y el documento pide no cachearse. -->
 <meta http-equiv="Cache-Control" content="no-store">
 <title>FirstFrame</title>
-<link rel="stylesheet" href="/styles.css?v=20">
+<link rel="stylesheet" href="/styles.css?v=21">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -73,6 +73,18 @@
               aria-label="New project">+</button>
     </div>
     <div class="panel-body">
+      <!-- El panel es el proyecto ABIERTO, no el árbol de todo. El selector
+           cambia de proyecto sin salir; la miga "Projects /" sigue siendo la
+           salida a la rejilla. -->
+      <div class="projsel">
+        <button class="projsel-btn" id="projsel-btn" type="button"
+                aria-haspopup="true" aria-expanded="false">
+          <span class="projsel-name" id="projsel-name">—</span>
+          <span class="projsel-n" id="projsel-n"></span>
+          <i class="projsel-tw" aria-hidden="true">▾</i>
+        </button>
+        <div class="projsel-menu" id="projsel-menu" hidden role="menu"></div>
+      </div>
       <button class="newbtn" id="btn-new" type="button">New spot</button>
       <form class="newproj" id="newproj" hidden>
         <input id="newproj-name" type="text" placeholder="Project name" spellcheck="false"
@@ -93,11 +105,24 @@
       <div class="panel-body monbody">
 
         <!-- paso 1: escribir el brief -->
+        <!-- La pantalla en blanco es el enemigo: los ejemplos se pulsan y
+             rellenan el campo. Todos son producto, bodegón o entorno — nunca
+             personas, que el generador las hace mal. -->
         <section class="compose" id="view-compose">
           <h1>What should we make?</h1>
-          <p class="compose-sub">Describe it in plain words. You'll be watching it within seconds — no waiting for the render to finish.</p>
-          <textarea id="brief" rows="3" spellcheck="false"
+          <p class="compose-sub">Describe it in plain words. You'll be watching it in seconds.</p>
+
+          <textarea id="brief" rows="4" spellcheck="false"
             placeholder="A 15-second spot for a running shoe. Dawn light, empty city, unhurried pace."></textarea>
+
+          <div class="sparks" id="sparks">
+            <span class="sparks-lbl">Start from</span>
+            <button type="button" data-brief="A 15-second spot for a running shoe. The shoe alone on wet asphalt at dawn, empty city, slow push-in, unhurried pace.">Sneaker at dawn</button>
+            <button type="button" data-brief="A 15-second spot for a glass perfume bottle on polished stone. One hard light, deep shadow, slow orbit around the bottle.">Perfume, one hard light</button>
+            <button type="button" data-brief="A 15-second spot for a coffee brand. Steam rising off a dark cup on a worn wooden counter, morning light through the window, nobody in frame.">Coffee on a wooden counter</button>
+            <button type="button" data-brief="A 15-second spot for a steel dive watch resting on black volcanic sand. Cold overcast light, macro on the dial, the tide coming in behind it.">Dive watch on black sand</button>
+          </div>
+
           <div class="compose-row">
             <label class="field">
               <span>Project</span>
@@ -112,7 +137,10 @@
               </div>
             </label>
             <span class="grow"></span>
-            <button class="primary big" id="btn-create" type="button">Create spot</button>
+            <div class="launch">
+              <span class="promise"><i aria-hidden="true"></i>First frame in ~6 seconds</span>
+              <button class="primary big" id="btn-create" type="button" disabled>Create spot</button>
+            </div>
           </div>
         </section>
 
@@ -194,17 +222,19 @@
     <div class="panel-body">
       <div class="rail-chips" id="r-chips"></div>
 
-      <section class="rblock">
+      <!-- Un bloque sin contenido no se enseña: nada de carteles diciendo que
+           están vacíos alrededor de lo único que importa. -->
+      <section class="rblock" id="rb-scenes" hidden>
         <h4>Scenes <span class="n" id="r-n-scenes"></span></h4>
         <div id="r-scenes"></div>
       </section>
 
-      <section class="rblock">
+      <section class="rblock" id="rb-prov" hidden>
         <h4>Record</h4>
         <div id="r-prov"></div>
       </section>
 
-      <section class="rblock rblock-feed">
+      <section class="rblock rblock-feed" id="rb-feed" hidden>
         <h4>Events <span class="n" id="r-n-feed">0</span></h4>
         <div class="feed" id="r-feed"></div>
       </section>
@@ -262,6 +292,6 @@
 
 <script src="/vendor/hls.min.js"></script>
 <script src="/mse.js"></script>
-<script src="/app.js?v=19"></script>
+<script src="/app.js?v=20"></script>
 </body>
 </html>

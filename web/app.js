@@ -638,7 +638,38 @@ function showCompose() {
   renderTimeline();
   renderRail();
   renderTech();
+  syncCreate();
   setTimeout(function () { $('brief').focus(); }, 30);
+}
+
+/* El botón se enciende con el texto: escribir ya es la mitad de la recompensa.
+ * Sin brief no hay lanzamiento, y se ve que no lo hay. */
+function syncCreate() {
+  var ta = $('brief'), btn = $('btn-create'), box = $('view-compose');
+  if (!ta || !btn) return;
+  var has = !!ta.value.trim();
+  btn.disabled = !has;
+  if (box) box.classList.toggle('has-brief', has);
+  if (!has) markSpark(null);
+}
+
+// Marca visualmente el ejemplo elegido (o ninguno, si el texto ya no es suyo).
+function markSpark(btn) {
+  var box = $('sparks');
+  if (!box) return;
+  Array.prototype.forEach.call(box.querySelectorAll('button'), function (b) {
+    b.classList.toggle('on', b === btn);
+  });
+}
+
+/* El paso de "escribir" a "ver" tiene un instante de arranque: el monitor y la
+ * línea de tiempo cobran vida. Menos de medio segundo — es una herramienta. */
+function ignite() {
+  var b = document.body;
+  b.classList.remove('igniting');
+  void b.offsetWidth;                      // reinicia la animación
+  b.classList.add('igniting');
+  setTimeout(function () { b.classList.remove('igniting'); }, 700);
 }
 
 function select(id, opts) {
@@ -668,8 +699,11 @@ function select(id, opts) {
 }
 
 /* ═════════════════════ panel PROJECT: el navegador ═════════════════════
- * Proyectos plegables con sus spots dentro. Un proyecto es la carpeta y el
- * spot es la secuencia: exactamente el árbol de cualquier suite de edición. */
+ * El panel es el proyecto ABIERTO, no el catálogo entero: cabecera con su
+ * nombre y, debajo, SOLO sus spots. Estando dentro de un proyecto vacío no
+ * tiene ningún sentido ver los spots de los demás — decía justo lo contrario
+ * de lo que la pantalla tiene que decir. Para cambiar de proyecto sin salir
+ * está el selector; para volver a la rejilla, la miga «Projects /». */
 
 // Todos los proyectos que existen: los declarados en el servidor MÁS los que
 // solo aparecen porque algún spot los nombra.
@@ -694,56 +728,87 @@ function jobsOf(name) {
   return S.jobs.filter(function (j) { return projectOf(j) === name; });
 }
 
+// El proyecto abierto. Nunca null: si aún no hay ninguno, el primero que exista.
+function curProject() {
+  var all = allProjects();
+  if (S.project && all.indexOf(S.project) !== -1) return S.project;
+  return all[0];
+}
+
 function renderJobs() {
+  renderProjSel();
+
   var tree = $('tree');
   if (!tree) return;
   var scroll = tree.parentNode ? tree.parentNode.scrollTop : 0;
   clear(tree);
 
-  allProjects().forEach(function (name) {
-    var mine = jobsOf(name);
-    var folded = !!S.folded[name];
-
-    var head = el('button', 'proj-head' + (name === S.project ? ' cur' : ''));
-    head.type = 'button';
-    head.setAttribute('aria-expanded', folded ? 'false' : 'true');
-    head.appendChild(el('i', 'tw', folded ? '▸' : '▾'));
-    head.appendChild(el('span', 'nm', name));
-    head.appendChild(el('span', 'n', String(mine.length)));
-    head.addEventListener('click', function () {
-      // Un clic hace las dos cosas que se esperan: pliega y deja el proyecto
-      // activo, que es donde va a caer el siguiente spot.
-      S.project = name;
-      S.folded[name] = !folded;
-      renderJobs();
-      renderProjectPicker();
-      renderCrumb();
-    });
-    tree.appendChild(head);
-
-    if (folded) return;
-
-    var box = el('div', 'proj-spots');
-    if (!mine.length) {
-      box.appendChild(el('div', 'proj-empty', 'No spots yet.'));
-    } else {
-      mine.forEach(function (job) {
-        var row = el('button', 'jobrow' + (job.id === S.sel ? ' sel' : ''));
-        row.type = 'button';
-        row.appendChild(el('b', null, spotTitle(job)));
-        var st = statusOf(job);
-        var s = el('span', 't-' + st.tone);
-        s.appendChild(el('i'));
-        s.appendChild(document.createTextNode(st.label));
-        row.appendChild(s);
-        row.addEventListener('click', function () { select(job.id); });
-        box.appendChild(row);
-      });
-    }
+  var mine = jobsOf(curProject());
+  if (!mine.length) {
+    var box = el('div', 'proj-empty');
+    box.appendChild(el('p', null, 'No spots in this project yet.'));
+    box.appendChild(el('p', 'dim', 'Write a brief and the first one appears here.'));
     tree.appendChild(box);
-  });
+  } else {
+    mine.forEach(function (job) {
+      var row = el('button', 'jobrow' + (job.id === S.sel ? ' sel' : ''));
+      row.type = 'button';
+      row.appendChild(el('b', null, spotTitle(job)));
+      var st = statusOf(job);
+      var s = el('span', 't-' + st.tone);
+      s.appendChild(el('i'));
+      s.appendChild(document.createTextNode(st.label));
+      row.appendChild(s);
+      row.addEventListener('click', function () { select(job.id); });
+      tree.appendChild(row);
+    });
+  }
 
   if (tree.parentNode) tree.parentNode.scrollTop = scroll;
+}
+
+/* — el selector: cambiar de proyecto sin volver a la rejilla — */
+
+function renderProjSel() {
+  var nm = $('projsel-name');
+  if (!nm) return;
+  var name = curProject();
+  var n = jobsOf(name).length;
+  nm.textContent = name;
+  nm.title = name;
+  $('projsel-n').textContent = n + (n === 1 ? ' spot' : ' spots');
+}
+
+function toggleProjMenu(show) {
+  var menu = $('projsel-menu'), btn = $('projsel-btn');
+  if (!menu || !btn) return;
+  if (show === undefined) show = menu.hidden;
+
+  if (show) {
+    clear(menu);
+    var cur = curProject();
+    allProjects().forEach(function (name) {
+      var it = el('button', 'projsel-item' + (name === cur ? ' cur' : ''));
+      it.type = 'button';
+      it.setAttribute('role', 'menuitem');
+      it.appendChild(el('span', 'nm', name));
+      var n = jobsOf(name).length;
+      it.appendChild(el('span', 'n', String(n)));
+      it.addEventListener('click', function () {
+        toggleProjMenu(false);
+        if (name !== cur) openProject(name);
+      });
+      menu.appendChild(it);
+    });
+    var all = el('button', 'projsel-item projsel-all', 'All projects');
+    all.type = 'button';
+    all.setAttribute('role', 'menuitem');
+    all.addEventListener('click', function () { toggleProjMenu(false); showHome(); });
+    menu.appendChild(all);
+  }
+
+  menu.hidden = !show;
+  btn.setAttribute('aria-expanded', show ? 'true' : 'false');
 }
 
 function renderProjectPicker() {
@@ -1208,10 +1273,7 @@ function startPlayhead() {
 
 function createSpot() {
   var brief = $('brief').value.trim();
-  if (!brief) {
-    brief = 'Un spot de 15 segundos para una zapatilla de running. Luz de amanecer, ciudad vacía.';
-    $('brief').value = brief;
-  }
+  if (!brief) { $('brief').focus(); return; }
   var btn = $('btn-create');
   btn.disabled = true;
   btn.textContent = 'Creating…';
@@ -1225,6 +1287,7 @@ function createSpot() {
     if (!job.project) job.project = project;
     upsertJob(job);
     S.sel = null;
+    ignite();
     select(job.id, { force: true });
     $('brief').value = '';
     pushFeed('job_update', job.id, 'job created · pipeline started', 'spot created, generation started');
@@ -1233,8 +1296,8 @@ function createSpot() {
     toast('bad', 'We could not create the spot.', 'Try again in a few seconds.', 9000);
     pushFeed('error', null, 'POST /api/jobs: ' + e.message, 'the spot could not be created');
   }).then(function () {
-    btn.disabled = false;
     btn.textContent = 'Create spot';
+    syncCreate();
   });
 }
 
@@ -1671,7 +1734,8 @@ function railScenes() {
   var sc = (job && job.scenes) || [];
   var ready = sc.filter(function (x) { return x.status === 'ready'; }).length;
   $('r-n-scenes').textContent = job ? ready + '/' + (job.scene_count || sc.length) : '';
-  if (!sc.length) { body.appendChild(el('div', 'tnote', 'No scenes yet.')); return; }
+  $('rb-scenes').hidden = !sc.length;
+  if (!sc.length) return;
   sc.forEach(function (x) {
     var r = el('div', 'scenerow ' + x.status);
     r.appendChild(el('span', 'no', String(x.n)));
@@ -1694,10 +1758,8 @@ function railProv() {
   if (!body) return;
   clear(body);
   var job = selJob();
-  if (!job) {
-    body.appendChild(el('div', 'tnote', 'Open a spot to see its record.'));
-    return;
-  }
+  $('rb-prov').hidden = !job;
+  if (!job) return;
 
   function row(k, v, sub) {
     var r = el('div', 'kv');
@@ -1745,7 +1807,8 @@ function railFeed() {
   if (!body) return;
   clear(body);
   $('r-n-feed').textContent = S.feed.length;
-  if (!S.feed.length) { body.appendChild(el('div', 'tnote', 'Nothing has happened yet.')); return; }
+  $('rb-feed').hidden = !S.feed.length;
+  if (!S.feed.length) return;
   S.feed.slice(-40).reverse().forEach(function (f) {
     var r = el('div', 'feedrow');
     r.appendChild(el('span', 't', fmtClock(f.at)));
@@ -1755,7 +1818,21 @@ function railFeed() {
   });
 }
 
-function renderRail() { topMeta(); railChips(); railScenes(); railProv(); railFeed(); }
+/* Sin spot abierto no hay nada que inspeccionar ni ninguna secuencia que
+ * recorrer: el inspector y la línea de tiempo se van, y la pantalla de crear
+ * se queda siendo el campo y poco más. Vuelven, ya desplegados, en cuanto hay
+ * algo que enseñar. */
+function renderRail() {
+  var open = !!selJob();
+  document.body.classList.toggle('no-spot', !open);
+  var b = $('btn-rail');
+  if (b) {
+    b.disabled = !open;
+    b.setAttribute('aria-expanded',
+      open && !document.body.classList.contains('no-rail') ? 'true' : 'false');
+  }
+  topMeta(); railChips(); railScenes(); railProv(); railFeed();
+}
 
 /* ═════════════════════════ datos + SSE ═════════════════════════ */
 
@@ -1992,6 +2069,8 @@ function bindKeys() {
     var typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT';
 
     if (e.key === 'Escape') {
+      var pm = $('projsel-menu');
+      if (pm && !pm.hidden) { toggleProjMenu(false); return; }
       if (S.techOpen) { toggleTech(false); return; }
       if (!$('changes').hidden) { $('changes').hidden = true; return; }
       if (!$('briefedit').hidden) { $('briefedit').hidden = true; return; }
@@ -2033,6 +2112,36 @@ function start() {
   $('btn-create').addEventListener('click', createSpot);
   $('btn-new').addEventListener('click', showCompose);
   $('btn-new-project').addEventListener('click', openNewProject);
+
+  // ── el brief: ejemplos que se pulsan y un botón que se enciende ──
+  // Escribir a mano desmarca el ejemplo: el texto ya es del usuario.
+  // (Rellenar el textarea por código no dispara `input`, así que el clic en un
+  // ejemplo no se auto-desmarca.)
+  $('brief').addEventListener('input', function () {
+    markSpark(null);
+    syncCreate();
+  });
+  $('sparks').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-brief]');
+    if (!b) return;
+    var ta = $('brief');
+    ta.value = b.getAttribute('data-brief');
+    markSpark(b);
+    syncCreate();
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  });
+  syncCreate();
+
+  // ── selector de proyecto del panel PROJECT ──
+  $('projsel-btn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggleProjMenu();
+  });
+  document.addEventListener('click', function (e) {
+    var m = $('projsel-menu');
+    if (m && !m.hidden && !e.target.closest('.projsel')) toggleProjMenu(false);
+  });
 
   // ── HOME ──
   $('crumb-home').addEventListener('click', showHome);
