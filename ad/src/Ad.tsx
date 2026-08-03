@@ -107,7 +107,7 @@ const Sub: React.FC<{children: React.ReactNode; delay?: number}> = ({children, d
 );
 
 /** Contador que sube con el frame. El número ES la animación. */
-const Counter: React.FC<{to: number; frames: number; suffix?: string; size?: number}> = ({
+export const Counter: React.FC<{to: number; frames: number; suffix?: string; size?: number}> = ({
   to,
   frames,
   suffix = 's',
