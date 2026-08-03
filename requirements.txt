@@ -7,3 +7,15 @@ boto3>=1.34
 # `genblaze` y `genblaze_core`, y el sink de B2 vive en genblaze-s3.
 genblaze==0.4.5
 genblaze-s3>=0.3.6
+
+# El pipeline (free_provider, kenburns) habla HTTP con httpx, y Pillow lee
+# dimensiones de imagen. Sin estas dos el import de pipeline.runner falla y el
+# backend cae al runner stub de ffmpeg SIN decirlo en la UI: la demo se ve con
+# barras de color y Genblaze no llega a ejecutarse. Paso en produccion.
+httpx>=0.27
+pillow>=10.0
+
+# Conectores que resuelve `resolve_providers()` segun GEN_MODE.
+genblaze-nvidia>=0.3.3
+genblaze-openai>=0.3.4
+genblaze-gmicloud>=0.3.5
