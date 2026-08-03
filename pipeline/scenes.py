@@ -55,6 +55,7 @@ from genblaze_core.models.step import Step
 from genblaze_core.providers.base import SyncProvider
 from genblaze_core.runnable.config import RunnableConfig
 
+from pipeline import byok
 from pipeline import prompts as PR
 from pipeline import providers as P
 from pipeline.free_provider import PollinationsProvider, _image_size
@@ -368,6 +369,7 @@ class GuardedImageProvider(SyncProvider):
     """
 
     name = "pollinations-guarded"
+    label = "keyframe"
 
     def __init__(self, primary: Any, fallback: Any, *,
                  fallback_model: str = "mock-image",
@@ -392,9 +394,13 @@ class GuardedImageProvider(SyncProvider):
         except Exception as exc:  # noqa: BLE001 - nada puede matar el job aqui
             reason = f"UNEXPECTED: {exc}"[:200]
 
+        # La razon acaba en un log, en el manifest y en el feed de la UI: si el
+        # proveedor la construyo con la cabecera dentro, aqui se tacha. Ver
+        # `pipeline/byok.py`.
+        reason = byok.scrub(reason)
         failed_model = step.model or FREE_IMAGE_MODEL
-        logger.warning("keyframe degradado a mock (%s se agoto): %s",
-                       failed_model, reason)
+        logger.warning("%s degradado a %s (%s se agoto): %s",
+                       self.label, self.fallback_model, failed_model, reason)
         self.degraded = reason
         # El manifest tiene que poder decir que esto NO lo genero el modelo real.
         step.model = self.fallback_model
@@ -436,6 +442,58 @@ def free_providers(scene: Scene, workdir: Path, ps: ProviderSet) -> ProviderSet:
     return ps
 
 
+class GuardedVideoProvider(GuardedImageProvider):
+    """Lo mismo que `GuardedImageProvider`, pero para el clip.
+
+    La logica es identica —un proveedor cae, entra el de respaldo, y la caida
+    queda escrita en el manifest— asi que se hereda entera. Lo unico distinto
+    es el nombre que sale en los logs y el sustantivo del aviso.
+    """
+
+    name = "gmicloud-guarded"
+    label = "clip"
+
+
+def byok_providers(scene: Scene, workdir: Path, ps: ProviderSet) -> ProviderSet:
+    """Modo `byok`: modo free + el video REAL de GMI Cloud con la clave del usuario.
+
+    Que cambia respecto a `free`: SOLO el clip. El keyframe sigue siendo
+    Pollinations (gratis, no gasta la cuota del juez) y la voz sigue en mock;
+    lo que la clave desbloquea es justo lo que no existe gratis, el modelo de
+    video (`pixverse-v5.6`, con `seedance-2-0` de failover).
+
+    Y si la clave no vale — 401, cuota agotada, el modelo no entitled — no pasa
+    nada grave: `GuardedVideoProvider` se come el error, el clip cae a Ken
+    Burns, el job TERMINA, y la degradacion sale en el manifest y en el feed
+    como cualquier otro failover. Una clave mala es un spot en modo free, no un
+    job muerto.
+    """
+    ps = free_providers(scene, workdir, ps)
+    kenburns = ps.video                        # la red de seguridad es el modo free entero
+    try:
+        from genblaze_gmicloud import GMICloudVideoProvider
+
+        # api_key explicita: el conector caeria si no a `GMI_API_KEY` del
+        # entorno, y la clave de un usuario NUNCA se escribe en el entorno del
+        # proceso (seria global a todos los jobs). Ver `pipeline/byok.py`.
+        gmi = GMICloudVideoProvider(api_key=byok.key())
+    except Exception as exc:  # noqa: BLE001 - conector opcional
+        ps.notes.append("GMICloud no disponible "
+                        f"({exc.__class__.__name__}: {byok.scrub(exc)[:120]}); "
+                        "el clip se queda en Ken Burns")
+        return ps
+
+    ps.video = GuardedVideoProvider(gmi, kenburns, fallback_model=FREE_VIDEO_MODEL)
+    ps.video_model = VIDEO_MODEL
+    ps.video_fallbacks = list(VIDEO_FALLBACKS)
+    ps.mode = "byok"
+    ps.notes.append(f"clip REAL con la clave GMI Cloud del usuario ({VIDEO_MODEL}, "
+                    f"failover {VIDEO_FALLBACKS[0]})")
+    ps.notes.append("si la clave falla (401 o cuota), el clip cae a Ken Burns y el job "
+                    "termina igual; queda como provider_mode=degraded")
+    return ps
+
+
 def resolve_providers(scene: Scene, workdir: str | Path, *, mock: bool | None = None
                       ) -> ProviderSet:
     """Elige providers mock, free o reales. Ver `gen_mode()`.
@@ -461,6 +519,11 @@ def resolve_providers(scene: Scene, workdir: str | Path, *, mock: bool | None = 
         compositor=FFmpegCompositor(output_dir=workdir),
         mode="mock",
     )
+    # La clave que trae el usuario manda sobre GEN_MODE: la puso para ver video
+    # real, y no tendria sentido que la instancia en `free` (o en `mock`) se la
+    # ignorase. `--mock` explicito sigue ganando: es el camino sin red.
+    if mock is not True and byok.active():
+        return byok_providers(scene, workdir, ps)
     if mode == "mock":
         return ps
     if mode == "free":
@@ -522,7 +585,7 @@ def keyframe_prompt(scene: Scene, brief: str, feedback: str | None,
     refine = ""
     if feedback and iteration > 0:
         refine = REFINE_TEMPLATE.render(feedback=feedback)
-    if mode in ("free", "real", "mixed"):
+    if mode in ("free", "real", "mixed", "byok"):
         return PR.keyframe_prompt(brief, n=scene.n, title=scene.title,
                                   extra=refine,
                                   scene_prompt_hint=scene.keyframe_prompt)
@@ -577,6 +640,18 @@ def build_scene_pipeline(
                           degraded_reason=reason)
 
         ps.image.on_degrade = _degraded
+    if isinstance(ps.video, GuardedVideoProvider):
+        # Mismo trato para el clip: si la clave del usuario falla, el manifest
+        # tiene que decirlo. `provider_mode=degraded` + la nota con el motivo.
+        def _degraded_clip(failed_model: str, reason: str) -> None:
+            ps.mode = "degraded"
+            ps.notes.append(f"clip degradado a {FREE_VIDEO_MODEL}: "
+                            f"{failed_model} -> {reason}")
+            pipe.metadata(provider_mode="degraded",
+                          provider_notes="; ".join(ps.notes),
+                          degraded_reason=reason)
+
+        ps.video.on_degrade = _degraded_clip
     if parent is not None:
         # Lineage entre escenas. El AgentLoop hace lo mismo entre iteraciones.
         pipe.from_result(parent)
@@ -587,7 +662,7 @@ def build_scene_pipeline(
     # --- step 0: keyframe -----------------------------------------------------
     kf_prompt = keyframe_prompt(scene, brief, feedback, iteration, mode=ps.mode)
     kf_params: dict[str, Any] | None = None
-    if ps.mode == "free":
+    if ps.mode in ("free", "byok"):
         # `seed` y `negative_prompt` los saca el pipeline de params y los sube a
         # campos de Step; los dos entran en la clave de `StepCache` y en la del
         # corpus, asi que el mismo prompt reutiliza imagen y el prompt refinado
@@ -899,6 +974,55 @@ def demo() -> None:
                 raise AssertionError("MODEL_ERROR tenia que propagarse")
             except ProviderError as exc:
                 assert exc.error_code is ProviderErrorCode.MODEL_ERROR
+
+            # --- byok: la clave del usuario cambia SOLO el clip ---------------
+            assert resolve_providers(sc, tmp / "nokey").mode == "free", \
+                "sin clave, resolve_providers tiene que decidir lo de siempre"
+            with byok.using("sk-de-mentira-0000"):
+                bps = resolve_providers(sc, tmp / "byok")
+                assert bps.mode == "byok", (bps.mode, bps.notes)
+                assert isinstance(bps.video, GuardedVideoProvider), type(bps.video)
+                assert isinstance(bps.image, GuardedImageProvider), type(bps.image)
+                assert bps.video_model == VIDEO_MODEL, bps.video_model
+                assert bps.video_fallbacks == VIDEO_FALLBACKS, bps.video_fallbacks
+                # La clave no aparece en NADA de lo que viaja al manifest.
+                assert not any("mentira" in n for n in bps.notes), bps.notes
+                # `--mock` explicito sigue mandando (camino sin red).
+                assert resolve_providers(sc, tmp / "byok", mock=True).mode == "mock"
+            assert not byok.active(), "la clave sobrevivio al bloque"
+
+            # --- clave invalida: el clip degrada, el JOB NO muere -------------
+            class _Rejected:
+                def get_capabilities(self):
+                    return None
+
+                def generate(self, step, config=None):
+                    raise ProviderError(
+                        "GMICloud rejected GMI_API_KEY (HTTP 401). "
+                        "Verify the key at https://console.gmicloud.ai/.",
+                        error_code=ProviderErrorCode.AUTH_FAILURE)
+
+            bwd = tmp / "byok-401"
+            bps = resolve_providers(sc, bwd)          # free: imagen mock + kenburns
+            bps.image = P.mock_image_provider(bwd, label="byok")
+            bps.image_model, bps.image_fallbacks = IMAGE_MODEL, []
+            bps.video = GuardedVideoProvider(_Rejected(), bps.video,
+                                             fallback_model=FREE_VIDEO_MODEL)
+            bps.video_model, bps.video_fallbacks = VIDEO_MODEL, []
+            bps.mode = "byok"
+            bres = build_scene_pipeline(sc, "byokjob", brief="spot", workdir=bwd,
+                                        providers=bps, cache_dir=None).run(
+                                            raise_on_failure=True)
+            bsteps = bres.run.steps
+            assert all(st.status == StepStatus.SUCCEEDED for st in bsteps), \
+                [(st.step_index, st.status, st.error) for st in bsteps]
+            bclip = bsteps[2]
+            assert bclip.metadata.get("degraded") is True, bclip.metadata
+            assert "401" in bclip.metadata.get("degraded_reason", ""), bclip.metadata
+            assert bclip.model == FREE_VIDEO_MODEL, bclip.model
+            assert bclip.metadata.get("fallback_from") == VIDEO_MODEL, bclip.metadata
+            assert bres.run.metadata.get("provider_mode") == "degraded", bres.run.metadata
+            assert composite_asset(bres) is not None, "el job con clave mala no dio mp4"
 
             # El camino real de free salvo la llamada a la red: keyframe local
             # -> Ken Burns -> fan-in con la voz -> parametros canonicos.
