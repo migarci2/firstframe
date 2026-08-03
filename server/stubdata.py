@@ -16,7 +16,7 @@ def _scene(n, status, ms=None, title=None):
         "n": n,
         "status": status,
         "ms": ms,
-        "title": title or f"Escena {n}",
+        "title": title or f"Scene {n}",
         "path": f"runs/j_stub/scene-{n}/composite.mp4",
     }
 

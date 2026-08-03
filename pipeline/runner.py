@@ -70,36 +70,36 @@ DEFAULT_SECONDS = 4.0
 # en cuadro" ahora hay un bodegon del producto en su contexto. En mock da igual
 # — pero en free es la diferencia entre un spot y una demo de IA cutre.
 _BEATS: list[tuple[str, str, str, str]] = [
-    ("apertura",
+    ("opening",
      "the whole product standing on a table in a wide calm interior, seen from a "
      "few metres away, small in the frame with the room visible around it, "
      "establishing shot, no people",
      "{brief_short}",
      "slow push-in towards the product"),
-    ("detalle",
+    ("detail",
      "close-up of the product itself filling the frame, its material, finish and "
      "surface detail razor sharp, dramatic side light, seamless backdrop",
-     "Cada detalle cuenta.",
+     "Every detail counts.",
      "slow drift across the surface, shallow depth of field"),
-    ("contexto",
+    ("context",
      "still life of the product in a lifestyle setting, empty room, soft window "
      "light, no people",
-     "Encaja donde vivas.",
+     "Fits wherever you live.",
      "lateral dolly across the scene"),
-    ("materia",
+    ("materials",
      "overhead flat lay of the raw materials behind the product, arranged on "
      "stone, studio light",
-     "Hecho de lo esencial.",
+     "Made of the essentials.",
      "slow overhead rise"),
-    ("beneficio",
+    ("result",
      "abstract macro of the result the product delivers, droplets and light "
      "refraction, no people",
-     "Resultados que se ven.",
+     "Results you can see.",
      "slow rack focus onto the highlight"),
-    ("cierre",
+    ("closing",
      "hero product shot centred on a plain gradient backdrop, soft floor "
      "reflection, studio lighting",
-     "Disponible ya.",
+     "Available now.",
      "static hero shot, slow zoom out"),
 ]
 
@@ -959,7 +959,7 @@ def demo() -> None:
 
         # --- el plan cuenta un mini arco y comparte ancla de estilo -----------
         three = plan_scenes(brief, 3)
-        assert [s.title for s in three] == ["apertura", "detalle", "cierre"], \
+        assert [s.title for s in three] == ["opening", "detail", "closing"], \
             [s.title for s in three]
         anchor = style_anchor(brief)
         assert all(anchor in s.keyframe_prompt for s in three), \
@@ -1039,7 +1039,7 @@ def demo() -> None:
         run_job("demojob-arity", "brief", on_scene=lambda n, p, m: got.append((n, p, m)),
                 scenes=plan[:1], mock=True, use_b2=False, out_dir=tmp,
                 cache_dir=None, max_iterations=1)
-        assert len(got) == 1 and got[0][0] == 1 and got[0][2]["title"] == "apertura", got
+        assert len(got) == 1 and got[0][0] == 1 and got[0][2]["title"] == "opening", got
     finally:
         for k, v in prev.items():
             os.environ.pop(k, None)

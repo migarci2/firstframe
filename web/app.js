@@ -603,7 +603,7 @@ function renderTechChips() {
   chip('B2 tx <b>' + (tx.total != null ? tx.total : '—') + '</b>');
   chip('events <b>' + (h.events_mode || '?') + '</b>');
   chip('player <b>' + Player.engine + '</b>');
-  if (job) chip('segmentos <b>' + (S.segs[job.id] || 0) + '</b>');
+  if (job) chip('segments <b>' + (S.segs[job.id] || 0) + '</b>');
   if (h.degraded) chip('DEGRADED', 'warn');
 }
 
@@ -626,17 +626,17 @@ function renderProv() {
   kv('total_render_ms', job.total_render_ms != null ? String(job.total_render_ms) : '—');
   kv('stream_url', job.stream_url || '—');
   kv('manifest', job.manifest_url ? 'provenance/' + job.id + '/manifest.json' : '— (aún no)');
-  kv('object_lock', job.lock ? job.lock.mode + ' hasta ' + job.lock.retain_until : '— (sin aprobar)');
+  kv('object_lock', job.lock ? job.lock.mode + ' until ' + job.lock.retain_until : '— (not approved)');
 
   // Linaje: cada rechazo encadena una toma nueva con parent_run_id.
   var det = (S.detail && S.detail.job && S.detail.job.id === job.id) ? S.detail : null;
   var rejects = ((det && det.decisions) || []).filter(function (d) { return d.action === 'reject'; });
-  body.appendChild(el('div', 'subhead', 'LINAJE · parent_run_id'));
+  body.appendChild(el('div', 'subhead', 'LINEAGE · parent_run_id'));
   var lin = el('div', 'lin');
   lin.appendChild(el('div', null, '● run ' + job.id + ' · take 1'));
   rejects.forEach(function (d, i) {
     var r = el('div');
-    r.appendChild(el('em', null, '│ reject' + (d.scene ? ' escena ' + d.scene : '') +
+    r.appendChild(el('em', null, '│ reject' + (d.scene ? ' scene ' + d.scene : '') +
                                  (d.note ? ' — "' + d.note + '"' : '')));
     lin.appendChild(r);
     lin.appendChild(el('div', null, '└─ refine take ' + (i + 2) + ' · parent_run_id=' + job.id));
@@ -746,7 +746,7 @@ function renderAgentLoop() {
     var n = el('div', 'iter');
     var top = el('div', 'iter-top');
     top.appendChild(el('span', null, fmtClock(it.at)));
-    top.appendChild(el('span', null, it.scene ? 'escena ' + it.scene : 'job'));
+    top.appendChild(el('span', null, it.scene ? 'scene ' + it.scene : 'job'));
     if (it.iteration != null) top.appendChild(el('span', null, 'iter ' + it.iteration));
     if (it.score != null) top.appendChild(el('span', 'sc' + (it.score >= 0.6 ? '' : ' low'), it.score.toFixed(2)));
     n.appendChild(top);
@@ -850,7 +850,7 @@ function topMeta() {
   t(job.status, job.status === 'approved' ? 'ok' : (isLive(job) ? 'on' : ''));
   if (job.first_frame_ms != null) t('ff ' + (job.first_frame_ms / 1000).toFixed(1) + 's');
   if (job.total_render_ms != null) t('total ' + (job.total_render_ms / 1000).toFixed(1) + 's');
-  if (S.segs[job.id]) t(S.segs[job.id] + ' seg');
+  if (S.segs[job.id]) t(S.segs[job.id] + ' segments');
 }
 
 function railChips() {
@@ -1029,7 +1029,7 @@ function handleEvent(type, d) {
     case 'render_complete':
       if (d.job) upsertJob(d.job);
       if (type === 'scene_ready') {
-        pushFeed('scene_ready', jid, 'escena ' + d.scene + ' ready' + (d.ms ? ' · ' + d.ms + ' ms' : ''));
+        pushFeed('scene_ready', jid, 'scene ' + d.scene + ' ready' + (d.ms ? ' · ' + d.ms + ' ms' : ''));
       } else if (type === 'render_complete') {
         pushFeed('render_complete', jid, 'total_render_ms ' + d.total_render_ms);
         if (jid === S.sel) toast('', 'Your spot is ready for review.', null, 7000);
@@ -1060,7 +1060,7 @@ function handleEvent(type, d) {
       return;
 
     case 'judge_score':
-      pushFeed('judge_score', jid, 'escena ' + d.scene + ' · score ' + (d.score != null ? d.score.toFixed(2) : '—'));
+      pushFeed('judge_score', jid, 'scene ' + d.scene + ' · score ' + (d.score != null ? d.score.toFixed(2) : '—'));
       if (jid) pushIter(jid, { _live: true, at: Date.now(), scene: d.scene, score: d.score,
                                iteration: d.iteration,
                                reason: d.detail || d.reason || 'vision judge (llama-3.2-90b-vision)',

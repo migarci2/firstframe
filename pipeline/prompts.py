@@ -446,6 +446,9 @@ _TITLE_ROLES: dict[str, str] = {
     "detalle": "detail", "detail": "detail", "macro": "detail",
     "materia": "detail", "textura": "detail", "beneficio": "detail",
     "contexto": "detail", "producto": "detail",
+    # Los titulos que produce `runner._BEATS` desde que son en ingles. Los de
+    # arriba se quedan: un plan por LLM todavia puede devolverlos en castellano.
+    "context": "detail", "materials": "detail", "result": "detail",
     "cierre": "hero", "closing": "hero", "hero": "hero", "final": "hero",
 }
 

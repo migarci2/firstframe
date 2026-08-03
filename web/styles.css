@@ -94,9 +94,13 @@ button { cursor: pointer; }
   padding: 0 24px;
   border-bottom: 1px solid var(--border);
 }
-.wordmark { font-size: 13px; font-weight: 500; letter-spacing: .014em; color: var(--white); }
-/* El único coral de la aplicación: el punto de la marca. */
-.wordmark i { color: var(--coral); font-style: normal; }
+/* El mismo lockup que la landing: la marca del primer fotograma y el resto
+ * del render todavía llegando. */
+.wordmark {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; letter-spacing: -.015em; color: var(--white);
+}
+.wordmark svg { display: block; flex: none; }
 
 .linkbtn {
   background: none; border: 0;

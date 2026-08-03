@@ -54,7 +54,7 @@ def public_job(job_id_or_row) -> dict | None:
         "status": row["status"],
         "scenes": [
             {"n": s["n"], "status": s["status"], "ms": s["ms"],
-             "title": s["title"] or f"Escena {s['n']}", "path": s["path"]}
+             "title": s["title"] or f"Scene {s['n']}", "path": s["path"]}
             for s in db.scenes(jid)
         ],
         "scene_count": row["scene_count"],
@@ -461,7 +461,7 @@ def _refine_safe(job_id: str, scene: int | None, note: str | None) -> None:
         mp4 = _refine_scene(job_id, n, note, take)
         new_n = max(s["n"] for s in db.scenes(job_id)) + 1
         db.update_scene(job_id, new_n, status="ready",
-                        title=f"Escena {n} — toma refinada {take}", path=str(mp4))
+                        title=f"Scene {n} — refined take {take}", path=str(mp4))
         db.update_job(job_id, scene_count=new_n)
         assembler.feed(job_id, str(mp4), scene_no=new_n)
         assembler.finish(job_id)
